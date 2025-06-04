@@ -1,0 +1,2 @@
+# Auto convert all text files to use LF in repo, CRLF in working directory
+text=auto

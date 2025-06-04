@@ -1,0 +1,32 @@
+/* Remove text decoration from all links in the header */
+header a {
+  text-decoration: none !important;
+}
+
+/* Remove text decoration even on hover/focus states */
+header a:hover,
+header a:focus,
+header a:active {
+  text-decoration: none !important;
+}
+
+/* Ensure dropdown menu links also have no text decoration */
+.dropdown-menu a,
+.navigation-menu a {
+  text-decoration: none !important;
+}
+
+/* Remove underlines from button links */
+header button a {
+  text-decoration: none !important;
+}
+
+/* Override any potential framework styles that might add underlines */
+header .no-underline {
+  text-decoration: none !important;
+}
+
+/* Ensure mobile menu links have no underlines */
+.sheet-content a {
+  text-decoration: none !important;
+}

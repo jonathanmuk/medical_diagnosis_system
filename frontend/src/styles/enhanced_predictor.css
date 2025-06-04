@@ -1,0 +1,193 @@
+/* Enhanced Disease Predictor Styles */
+
+.enhanced-disease-predictor-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+/* Header styles */
+.enhanced-disease-predictor-container .page-header {
+  margin-bottom: 2rem;
+}
+
+.enhanced-disease-predictor-container .page-header h1 {
+  display: flex;
+  align-items: center;
+  font-size: 2rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  color: hsl(var(--primary));
+}
+
+.enhanced-disease-predictor-container .page-header .icon {
+  margin-right: 0.75rem;
+  width: 2rem;
+  height: 2rem;
+}
+
+/* Info card styles */
+.info-card.enhanced {
+  background-color: hsl(var(--primary) / 0.1);
+  border-left: 4px solid hsl(var(--primary));
+}
+
+/* Clarifying questions card */
+.clarifying-questions-card {
+  margin-top: 2rem;
+  border: 1px solid hsl(var(--primary) / 0.3);
+  background-color: hsl(var(--background) / 0.8);
+}
+
+.clarifying-questions-form .question-item {
+  padding: 1rem;
+  border-radius: 0.5rem;
+  background-color: hsl(var(--card) / 0.5);
+  border: 1px solid hsl(var(--border));
+}
+
+.clarifying-questions-form .question-label {
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+
+.clarifying-questions-form .question-description {
+  color: hsl(var(--muted-foreground));
+  margin-bottom: 0.75rem;
+}
+
+/* Enhanced results grid */
+.enhanced-results-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+@media (min-width: 768px) {
+  .enhanced-results-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* Enhanced disease card */
+.disease-card.enhanced {
+  border: 1px solid hsl(var(--border));
+  transition: all 0.2s ease-in-out;
+}
+
+.disease-card.enhanced:hover {
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.disease-card.enhanced .disease-card-header {
+  padding-bottom: 1rem;
+}
+
+.disease-card.enhanced .disease-card-header.confidence-high {
+  background-color: hsl(var(--destructive) / 0.1);
+  border-bottom: 2px solid hsl(var(--destructive));
+}
+
+.disease-card.enhanced .disease-card-header.confidence-medium {
+  background-color: hsl(var(--warning) / 0.1);
+  border-bottom: 2px solid hsl(var(--warning));
+}
+
+.disease-card.enhanced .disease-card-header.confidence-low {
+  background-color: hsl(var(--secondary) / 0.1);
+  border-bottom: 2px solid hsl(var(--secondary));
+}
+
+.disease-card.enhanced .badge-container {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.disease-card.enhanced .symptom-match-badge {
+  background-color: hsl(var(--background));
+}
+
+/* Severity indicator */
+.severity-info {
+  margin-top: 1rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid hsl(var(--border) / 0.5);
+}
+
+.severity-indicator {
+  display: flex;
+  flex-direction: column;
+  margin-top: 0.25rem;
+}
+
+.severity-label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  margin-bottom: 0.25rem;
+}
+
+.severity-bar {
+  height: 0.5rem;
+  background-color: hsl(var(--muted) / 0.3);
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.severity-fill {
+  height: 100%;
+  border-radius: 9999px;
+}
+
+.severity-high .severity-label {
+  color: hsl(var(--destructive));
+}
+
+.severity-high .severity-fill {
+  background-color: hsl(var(--destructive));
+}
+
+.severity-medium .severity-label {
+  color: hsl(var(--warning));
+}
+
+.severity-medium .severity-fill {
+  background-color: hsl(var(--warning));
+}
+
+.severity-low .severity-label {
+  color: hsl(var(--primary));
+}
+
+.severity-low .severity-fill {
+  background-color: hsl(var(--primary));
+}
+
+/* Recommendation alert */
+.recommendation-alert {
+  margin-top: 1rem;
+  background-color: hsl(var(--primary) / 0.1);
+  border-color: hsl(var(--primary));
+}
+
+/* Matching and missing symptoms */
+.matching-symptoms, .missing-symptoms {
+  margin-top: 0.75rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed hsl(var(--border));
+}
+
+.matching-symptoms h4, .missing-symptoms h4 {
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+/* Disclaimer alert */
+.disclaimer-alert {
+  margin-top: 2rem;
+  background-color: hsl(var(--muted) / 0.3);
+  border-color: hsl(var(--muted));
+}
