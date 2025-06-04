@@ -16,9 +16,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# API Keys
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY') 
+
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -181,16 +179,3 @@ os.makedirs(os.path.join(DATA_DIR, 'symptoms'), exist_ok=True)
 
 AUTH_USER_MODEL = 'accounts.User'
 
-# GEMINI_API_KEY= 'AIzaSyB2CMIrnrgs1J_w8SoC8AW3VO1oQcz39UE'
-
-# OPENAI_API_KEY = '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'
-
-# DEEPSEEK_API_KEY = 'sk-fa0eb237eb93418498a6e95668cac6c9'
-
-# SERPER_API_KEY = 'c52eb9d9fa86ca394b037f7cc7544b3e3d8f107a'
-
-# HF_TOKEN = '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'
-
-# PHOENIX_API_KEY = 'cefab6f2b64afeb46ab:307207a'
-
-# LANGCHAIN_API_KEY = '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'
