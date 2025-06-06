@@ -129,11 +129,17 @@ class MedicalDiagnosticGraph:
         questions_asked = state.get("questions_asked", 0)
         max_questions = state.get("max_questions", 5)
         
-        # Continue if we need more questions and haven't reached the limit
-        if needs_more and questions_asked < max_questions:
-            return "continue"
-        else:
+        # More explicit conditions
+        if questions_asked >= max_questions:
+            print(f"Ending: Question limit reached ({questions_asked}/{max_questions})")
             return "end"
+        
+        if not needs_more:
+            print(f"Ending: No more questions needed")
+            return "end"
+        
+        print(f"Continuing: {questions_asked}/{max_questions} questions asked, needs_more={needs_more}")
+        return "continue"
         
     @traceable(name="diagnostic_workflow")
     def run_diagnosis(self,
@@ -253,6 +259,21 @@ class MedicalDiagnosticGraph:
         print(f"Formatting question response. Found {len(questions)} questions")
         print(f"State data keys: {list(state_data.keys()) if state_data else 'No state data'}")
         
+        # CHECK: If no questions found and we've reached max questions, return completion signal
+        questions_asked = state_data.get("questions_asked", 0)
+        max_questions = state_data.get("max_questions", 5)
+    
+        if not questions and questions_asked >= max_questions:
+            print(f"No questions found and max questions reached ({questions_asked}/{max_questions}). Signaling completion.")
+            return {
+                "type": "diagnosis_ready",
+                "session_id": session_id,
+                "message": "All questions completed, proceeding to final diagnosis",
+                "questions_asked": questions_asked,
+                "max_questions": max_questions,
+                "status": "proceeding_to_diagnosis"
+            }
+    
         # Ensure all questions have proper structure
         formatted_questions = []
         for i, q in enumerate(questions):
@@ -284,20 +305,17 @@ class MedicalDiagnosticGraph:
                 formatted_questions.append(formatted_q)
                 print(f"Formatted string question {i+1}: {str(q)}")
         
-        # If no questions were formatted, create a default one
+        # If no questions were formatted, let the workflow complete
         if not formatted_questions:
-            print("No questions found, creating default question")
-            print(f"DEBUG: Original state structure: {state}")
-            formatted_questions = [{
-                "id": "q1",
-                "question": "Do you have any additional symptoms not mentioned earlier?",
-                "question_text": "Do you have any additional symptoms not mentioned earlier?",
-                "type": "yes_no",
-                "related_disease": "General",
-                "symptom_checking": "additional symptoms",
-                "priority": 1,
-                "required": True
-            }]
+            print("No questions found, allowing workflow to complete")
+            return {
+                "type": "no_more_questions",
+                "session_id": session_id,
+                "message": "No additional questions needed",
+                "questions_asked": questions_asked,
+                "max_questions": max_questions,
+                "status": "completing_diagnosis"
+            }
         
         progress = {
             "questions_asked": state_data.get("questions_asked", 0),
@@ -342,7 +360,7 @@ class MedicalDiagnosticGraph:
             
             print(f"Current state before answer: {current_state.values.keys() if current_state.values else 'No values'}")
             
-            # FIX: Calculate number of answers provided
+            # Calculate number of answers provided
             num_answers = len(answers) if isinstance(answers, dict) else 1
             
             # Ensure we have a proper state structure
@@ -355,12 +373,21 @@ class MedicalDiagnosticGraph:
             state_values.setdefault("current_step", "response_received")
             
             # Update state with the human answers
+            new_questions_asked = state_values.get("questions_asked", 0) + len(answers)
+            
             updated_values = {
             **current_state.values,
-            "user_responses": answers,  # Use answers directly
-            "questions_asked": state_values.get("questions_asked", 0) + len(answers),
+            "user_responses": answers, 
+            "questions_asked": new_questions_asked,
             "current_step": "response_received"
             }
+            
+            # CHECK: If we've reached max questions, force completion
+            max_questions = updated_values.get("max_questions", 5)
+            if new_questions_asked >= max_questions:
+                print(f"Max questions reached after this answer: {new_questions_asked}/{max_questions}")
+                updated_values["needs_more_questions"] = False
+                updated_values["current_step"] = "force_completion"
             
             # Continue execution from the interrupt
             final_state = None
@@ -370,14 +397,23 @@ class MedicalDiagnosticGraph:
                 
                 # Check if we're waiting for more input
                 if self._is_waiting_for_input(state):
-                    return self._format_question_response(state, session_id)
+                    response = self._format_question_response(state, session_id)
+                    # If the response indicates completion, break out and format results
+                    if response.get("type") in ["diagnosis_ready", "no_more_questions"]:
+                        print("Detected completion signal, proceeding to final results")
+                        break
+                    return response
             
             # Check if we're still at an interrupt
             if self.checkpointer:
                 final_graph_state = self.graph.get_state(config)
                 if final_graph_state and final_graph_state.next:
                     if 'human_input' in final_graph_state.next:
-                        return self._format_question_response(final_graph_state.values, session_id)
+                        response = self._format_question_response(final_graph_state.values, session_id)
+                        if response.get("type") in ["diagnosis_ready", "no_more_questions"]:
+                            print("Final state indicates completion")
+                            return self._format_results(final_graph_state.values)
+                        return response
             
             return self._format_results(final_state)
             
@@ -434,91 +470,38 @@ class MedicalDiagnosticGraph:
         return {}
     
     def _format_results(self, final_state: Dict[str, Any]) -> Dict[str, Any]:
-        """Format the final results for output"""
         if not final_state:
             return {"error": "No final state available"}
-            
-        # Handle different possible state structures
-        state_data = None
         
-        # Case 1: Direct state data
-        if isinstance(final_state, dict) and "session_id" in final_state:
-            state_data = final_state
+        # Debug logging
+        print(f"Formatting final results. State keys: {list(final_state.keys())}")
         
-        # Case 2: Nested state data (from graph stream)
-        elif isinstance(final_state, dict):
-            # Try to find state data in nested structure
-            for key, value in final_state.items():
-                if isinstance(value, dict) and "session_id" in value:
-                    state_data = value
-                    break
-            
-            # If still not found, try to extract from common graph output patterns
-            if not state_data:
-                # Check if it's a node output structure
-                possible_keys = ['orchestrator', 'evaluator', 'explanation', 'refinement', 'validation']
-                for key in possible_keys:
-                    if key in final_state and isinstance(final_state[key], dict):
-                        # Look for state data in the node output
-                        node_output = final_state[key]
-                        if "session_id" in node_output:
-                            state_data = node_output
-                            break
+        # Extract data from all relevant nodes
+        state_data = {}
+        node_keys = ['evaluator', 'explanation', 'refinement', 'validation', 'response_integration']
         
-        # Case 3: If still no state data found, create a minimal response
+        for key in node_keys:
+            if key in final_state and isinstance(final_state[key], dict):
+                print(f"Found data in {key} node")
+                state_data.update(final_state[key])
+        
+        # If still no data, try direct extraction
         if not state_data:
-            print(f"Warning: Could not extract state data from: {final_state}")
-            # Try to extract what we can
-            session_id = None
-            predictions = {}
-            
-            # Look for session_id anywhere in the structure
-            def find_session_id(obj, path=""):
-                if isinstance(obj, dict):
-                    if "session_id" in obj:
-                        return obj["session_id"]
-                    for k, v in obj.items():
-                        result = find_session_id(v, f"{path}.{k}")
-                        if result:
-                            return result
-                return None
-            
-            session_id = find_session_id(final_state)
-            
-            # Look for predictions
-            def find_predictions(obj):
-                if isinstance(obj, dict):
-                    if "predictions" in obj or "refined_predictions" in obj or "initial_predictions" in obj:
-                        return obj.get("predictions") or obj.get("refined_predictions") or obj.get("initial_predictions", {})
-                    for v in obj.values():
-                        result = find_predictions(v)
-                        if result:
-                            return result
-                return {}
-            
-            predictions = find_predictions(final_state)
-            
-            return {
-                "session_id": session_id or "unknown",
-                "predictions": predictions,
-                "symptoms_analyzed": [],
-                "questions_asked": 0,
-                "reasoning_steps": [],
-                "timestamp": None,
-                "status": "completed",
-                "warning": "Partial data extraction due to unexpected state structure"
-            }
+            state_data = final_state
+            print("Using direct state data")
         
-        # Normal processing with extracted state data
-        predictions = state_data.get("refined_predictions", state_data.get("initial_predictions", {}))
+        # Extract all components
+        predictions = state_data.get("refined_predictions", 
+                                state_data.get("initial_predictions", {}))
         validation_results = state_data.get("validation_results", {})
         explanations = state_data.get("explanations", {})
         confidence_scores = state_data.get("confidence_scores", {})
         
+        print(f"Extracted: {len(predictions)} predictions, {len(explanations)} explanations")
+        
         # Create comprehensive results
         final_predictions = {}
         for disease, prediction_data in predictions.items():
-            # Handle both dict and float probability formats
             if isinstance(prediction_data, dict):
                 probability = prediction_data.get("probability", 0)
                 confidence = prediction_data.get("confidence", "Unknown")
@@ -529,22 +512,32 @@ class MedicalDiagnosticGraph:
             final_predictions[disease] = {
                 "probability": probability,
                 "confidence": confidence,
-                "explanation": explanations.get(disease, "No explanation available"),
+                "explanation": explanations.get(disease, f"Based on symptom analysis, there is a {probability:.1%} likelihood of {disease}."),
                 "validation": validation_results.get(disease, {}),
                 "overall_confidence": confidence_scores.get(disease, {})
             }
         
-        return {
+        result = {
+            "type": "diagnosis",
             "session_id": state_data.get("session_id"),
             "predictions": final_predictions,
-            "symptoms_analyzed": state_data.get("updated_symptoms", state_data.get("selected_symptoms", [])),
+            "symptoms_analyzed": state_data.get("updated_symptoms", 
+                                            state_data.get("selected_symptoms", [])),
             "questions_asked": state_data.get("questions_asked", 0),
             "reasoning_steps": state_data.get("reasoning_steps", []),
             "timestamp": state_data.get("timestamp"),
             "status": "completed",
             "prediction_complete": True,
+            "summary": {
+                "total_diseases_analyzed": len(final_predictions),
+                "questions_asked": state_data.get("questions_asked", 0),
+                "confidence_level": "High" if any(p.get("confidence") == "High" for p in final_predictions.values()) else "Medium"
+            }
         }
         
+        print(f"Final result type: {result['type']}, predictions: {len(result['predictions'])}")
+        return result
+    
     def get_session_history(self, session_id: str) -> Dict[str, Any]:
         """Get the history of a diagnostic session"""
         if not self.checkpointer:

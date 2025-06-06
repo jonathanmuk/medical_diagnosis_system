@@ -1,8 +1,9 @@
-import React from 'react';
+import { useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
+import '../styles/homepage.css';
 
 // Shadcn components
 import { Button } from "../components/ui/button";
@@ -21,47 +22,142 @@ import { Input } from "../components/ui/input";
 
 const HomePage = () => {
   const { isAuthenticated, userProfile } = useAuth();
+  const carouselRef = useRef(null);
+  const indicatorRefs = useRef([]);
 
+  useEffect(() => {
+    // Auto-slide functionality
+    const interval = setInterval(() => {
+      if (carouselRef.current) {
+        const nextButton = carouselRef.current.querySelector('[data-carousel-next]');
+        if (nextButton) {
+          nextButton.click();
+        }
+      }
+    }, 5000);
+
+    // Indicator sync functionality
+    const updateIndicators = () => {
+      const activeSlide = document.querySelector('.carousel-item.active');
+      if (activeSlide) {
+        const slideIndex = Array.from(activeSlide.parentNode.children).indexOf(activeSlide);
+        indicatorRefs.current.forEach((indicator, index) => {
+          if (indicator) {
+            indicator.classList.toggle('active', index === slideIndex);
+          }
+        });
+      }
+    };
+
+    // Observer for slide changes
+    const observer = new MutationObserver(updateIndicators);
+    const carouselContent = document.querySelector('.carousel-content');
+    if (carouselContent) {
+      observer.observe(carouselContent, { childList: true, subtree: true });
+    }
+
+    return () => {
+      clearInterval(interval);
+      observer.disconnect();
+    };
+  }, []);
+  
   return (
     <div className="flex flex-col min-h-screen">
       <Header />
       
       {/* Hero Section */}
-      <section className="relative">
-        <Carousel className="w-full" opts={{ loop: true }}>
+      <section className="relative overflow-hidden">
+        <Carousel className="w-full hero-carousel" opts={{ loop: true, autoplay: { delay: 5000 }, align: "start" }}>
           <CarouselContent>
             {/* Hero Slide 1 */}
             <CarouselItem>
-              <div className="relative h-[600px] w-full">
-                <img
-                  src="/images/hero-1.jpg"
-                  alt="Medical professionals"
-                  className="w-full h-full object-cover brightness-[0.7]"
-                />
-                <div className="absolute inset-0 flex items-center">
+              <div className="relative h-[100vh] w-full hero-slide">
+                <div className="hero-background">
+                  <img
+                    src="/images/hero-1.jpg"
+                    alt="Medical professionals"
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="hero-overlay"></div>
+                </div>
+                
+                {/* Animated background elements */}
+                <div className="hero-particles">
+                  <div className="particle particle-1"></div>
+                  <div className="particle particle-2"></div>
+                  <div className="particle particle-3"></div>
+                  <div className="particle particle-4"></div>
+                </div>
+                
+                <div className="absolute inset-0 flex items-center z-10">
                   <Container>
-                    <div className="max-w-xl space-y-5">
-                      <Badge variant="primary" className="px-3 py-1.5">Uganda's Premier Health Platform</Badge>
-                      <h1 className="text-5xl font-bold text-white">Dr.J</h1>
-                      <h2 className="text-2xl font-medium text-white">Your All-in-One Digital Healthcare Ecosystem</h2>
-                      <p className="text-lg text-white/90">
-                        Connecting patients with doctors, hospitals, pharmacies, and wellness services
+                    <div className="max-w-2xl space-y-8 hero-content">
+                      <div className="hero-badge-wrapper">
+                        <Badge variant="primary" className="hero-badge">
+                          <span className="badge-icon">🇺🇬</span>
+                          Uganda's Premier Health Platform
+                        </Badge>
+                      </div>
+                      
+                      <div className="hero-title-wrapper">
+                        <h1 className="hero-title">
+                          <span className="title-main">Dr.J</span>
+                          <span className="title-pulse"></span>
+                        </h1>
+                        <h2 className="hero-subtitle">
+                          Your All-in-One Digital Healthcare Ecosystem
+                        </h2>
+                      </div>
+                      
+                      <p className="hero-description">
+                        Connecting patients with doctors, hospitals, pharmacies, and wellness services 
+                        through cutting-edge AI technology and seamless digital experiences.
                       </p>
-                      <div className="flex gap-4 pt-2">
+                      
+                      <div className="hero-cta-wrapper">
                         {isAuthenticated ? (
-                          <Button asChild size="lg">
-                            <Link to="/dashboard">Go to Dashboard</Link>
+                          <Button asChild size="lg" className="hero-cta-primary">
+                            <Link to="/dashboard">
+                              <span>Go to Dashboard</span>
+                              <svg className="cta-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                              </svg>
+                            </Link>
                           </Button>
                         ) : (
                           <>
-                            <Button asChild size="lg">
-                              <Link to="/login">Get Started</Link>
+                            <Button asChild size="lg" className="hero-cta-primary">
+                              <Link to="/login">
+                                <span>Get Started</span>
+                                <svg className="cta-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                </svg>
+                              </Link>
                             </Button>
-                            <Button asChild variant="outline" size="lg">
-                              <Link to="/register">Learn More</Link>
+                            <Button asChild variant="outline" size="lg" className="hero-cta-secondary">
+                              <Link to="/register">
+                                <span>Learn More</span>
+                              </Link>
                             </Button>
                           </>
                         )}
+                      </div>
+                      
+                      {/* Trust indicators */}
+                      <div className="hero-trust-indicators">
+                        <div className="trust-item">
+                          <span className="trust-number">50K+</span>
+                          <span className="trust-label">Patients Served</span>
+                        </div>
+                        <div className="trust-item">
+                          <span className="trust-number">500+</span>
+                          <span className="trust-label">Healthcare Providers</span>
+                        </div>
+                        <div className="trust-item">
+                          <span className="trust-number">99.9%</span>
+                          <span className="trust-label">Uptime</span>
+                        </div>
                       </div>
                     </div>
                   </Container>
@@ -71,24 +167,50 @@ const HomePage = () => {
 
             {/* Hero Slide 2 */}
             <CarouselItem>
-              <div className="relative h-[600px] w-full">
-                <img
-                  src="/images/hero-2.jpg"
-                  alt="Telemedicine"
-                  className="w-full h-full object-cover brightness-[0.7]"
-                />
-                <div className="absolute inset-0 flex items-center">
+              <div className="relative h-[100vh] w-full hero-slide">
+                <div className="hero-background">
+                  <img
+                    src="/images/hero-2.jpg"
+                    alt="Telemedicine"
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="hero-overlay hero-overlay-blue"></div>
+                </div>
+                
+                <div className="hero-particles">
+                  <div className="particle particle-1"></div>
+                  <div className="particle particle-2"></div>
+                  <div className="particle particle-3"></div>
+                </div>
+                
+                <div className="absolute inset-0 flex items-center z-10">
                   <Container>
-                    <div className="max-w-xl space-y-5">
-                      <Badge variant="primary" className="px-3 py-1.5">Telemedicine</Badge>
-                      <h1 className="text-4xl font-bold text-white">Virtual Care, Real Results</h1>
-                      <p className="text-lg text-white/90">
-                        Access quality healthcare from anywhere through virtual consultations
+                    <div className="max-w-2xl space-y-8 hero-content">
+                      <div className="hero-badge-wrapper">
+                        <Badge variant="primary" className="hero-badge hero-badge-blue">
+                          <span className="badge-icon">📱</span>
+                          Telemedicine
+                        </Badge>
+                      </div>
+                      
+                      <div className="hero-title-wrapper">
+                        <h1 className="hero-title hero-title-alt">
+                          Virtual Care, Real Results
+                        </h1>
+                      </div>
+                      
+                      <p className="hero-description">
+                        Access quality healthcare from anywhere through virtual consultations, 
+                        AI-powered diagnostics, and 24/7 medical support.
                       </p>
-                      <div className="flex gap-4 pt-2">
-                        <Button asChild size="lg">
+                      
+                      <div className="hero-cta-wrapper">
+                        <Button asChild size="lg" className="hero-cta-primary">
                           <Link to={isAuthenticated ? "/dashboard" : "/register"}>
-                            {isAuthenticated ? "Access Services" : "Join Now"}
+                            <span>{isAuthenticated ? "Access Services" : "Join Now"}</span>
+                            <svg className="cta-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                            </svg>
                           </Link>
                         </Button>
                       </div>
@@ -100,24 +222,50 @@ const HomePage = () => {
 
             {/* Hero Slide 3 */}
             <CarouselItem>
-              <div className="relative h-[600px] w-full">
-                <img
-                  src="/images/hero-3.jpg"
-                  alt="AI Healthcare"
-                  className="w-full h-full object-cover brightness-[0.7]"
-                />
-                <div className="absolute inset-0 flex items-center">
+              <div className="relative h-[100vh] w-full hero-slide">
+                <div className="hero-background">
+                  <img
+                    src="/images/hero-3.jpg"
+                    alt="AI Healthcare"
+                    className="w-full h-full object-cover"
+                  />
+                  <div className="hero-overlay hero-overlay-purple"></div>
+                </div>
+                
+                <div className="hero-particles">
+                  <div className="particle particle-1"></div>
+                  <div className="particle particle-2"></div>
+                  <div className="particle particle-3"></div>
+                </div>
+                
+                <div className="absolute inset-0 flex items-center z-10">
                   <Container>
-                    <div className="max-w-xl space-y-5">
-                      <Badge variant="primary" className="px-3 py-1.5">AI-Powered</Badge>
-                      <h1 className="text-4xl font-bold text-white">Smart Diagnostics</h1>
-                      <p className="text-lg text-white/90">
-                        Advanced AI technology for accurate disease prediction and early detection
+                    <div className="max-w-2xl space-y-8 hero-content">
+                      <div className="hero-badge-wrapper">
+                        <Badge variant="primary" className="hero-badge hero-badge-purple">
+                          <span className="badge-icon">🤖</span>
+                          AI-Powered
+                        </Badge>
+                      </div>
+                      
+                      <div className="hero-title-wrapper">
+                        <h1 className="hero-title hero-title-alt">
+                          Smart Diagnostics
+                        </h1>
+                      </div>
+                      
+                      <p className="hero-description">
+                        Advanced AI technology for accurate disease prediction, early detection, 
+                        and transparent medical reasoning you can trust.
                       </p>
-                      <div className="flex gap-4 pt-2">
-                        <Button asChild size="lg">
+                      
+                      <div className="hero-cta-wrapper">
+                        <Button asChild size="lg" className="hero-cta-primary">
                           <Link to={isAuthenticated ? "/disease-prediction" : "/register"}>
-                            Try AI Diagnosis
+                            <span>Try AI Diagnosis</span>
+                            <svg className="cta-icon" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                            </svg>
                           </Link>
                         </Button>
                       </div>
@@ -127,48 +275,61 @@ const HomePage = () => {
               </div>
             </CarouselItem>
           </CarouselContent>
-          <CarouselPrevious className="left-4" />
-          <CarouselNext className="right-4" />
+          
+          {/* Slide indicators */}
+           <div className="hero-indicators">
+            <div className="indicator" data-slide="0"></div>
+            <div className="indicator" data-slide="1"></div>
+            <div className="indicator" data-slide="2"></div>
+          </div>
         </Carousel>
 
-        {/* Stats Cards */}
+        {/* Modern Stats Cards */}
         <Container>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-0 rounded-lg overflow-hidden shadow-lg -mt-20 relative z-10 bg-white">
-            <div className="p-6 text-center border-r border-gray-200">
-              <div className="mb-2 text-primary">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
-              </div>
-              <h3 className="text-2xl font-bold">500+</h3>
-              <p className="text-muted-foreground">Healthcare Providers</p>
-            </div>
-            <div className="p-6 text-center border-r border-gray-200">
-              <div className="mb-2 text-primary">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="stats-container">
+            <div className="stats-card">
+              <div className="stats-icon stats-icon-green">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
                 </svg>
               </div>
-              <h3 className="text-2xl font-bold">100+</h3>
-              <p className="text-muted-foreground">Partner Hospitals</p>
+              <div className="stats-content">
+                <h3 className="stats-number">100+</h3>
+                <p className="stats-label">Partner Hospitals</p>
+              </div>
+              <div className="stats-trend">
+                <span className="trend-up">↗ 8%</span>
+              </div>
             </div>
-            <div className="p-6 text-center border-r border-gray-200">
-              <div className="mb-2 text-primary">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+
+            <div className="stats-card">
+              <div className="stats-icon stats-icon-purple">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
                 </svg>
               </div>
-              <h3 className="text-2xl font-bold">250+</h3>
-              <p className="text-muted-foreground">Pharmacies</p>
+              <div className="stats-content">
+                <h3 className="stats-number">250+</h3>
+                <p className="stats-label">Pharmacies</p>
+              </div>
+              <div className="stats-trend">
+                <span className="trend-up">↗ 15%</span>
+              </div>
             </div>
-            <div className="p-6 text-center">
-              <div className="mb-2 text-primary">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 mx-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+
+            <div className="stats-card">
+              <div className="stats-icon stats-icon-orange">
+                <svg fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
                 </svg>
               </div>
-              <h3 className="text-2xl font-bold">50K+</h3>
-              <p className="text-muted-foreground">Patients Served</p>
+              <div className="stats-content">
+                <h3 className="stats-number">50K+</h3>
+                <p className="stats-label">Patients Served</p>
+              </div>
+              <div className="stats-trend">
+                <span className="trend-up">↗ 25%</span>
+              </div>
             </div>
           </div>
         </Container>

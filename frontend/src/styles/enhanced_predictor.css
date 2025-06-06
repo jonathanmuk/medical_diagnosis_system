@@ -26,12 +26,6 @@
   height: 2rem;
 }
 
-/* Info card styles */
-.info-card.enhanced {
-  background-color: hsl(var(--primary) / 0.1);
-  border-left: 4px solid hsl(var(--primary));
-}
-
 /* Clarifying questions card */
 .clarifying-questions-card {
   margin-top: 2rem;
@@ -191,3 +185,1228 @@
   background-color: hsl(var(--muted) / 0.3);
   border-color: hsl(var(--muted));
 }
+
+/* AI Header Styles */
+.ai-page-header {
+  position: relative;
+  background: linear-gradient(135deg, 
+    rgba(59, 130, 246, 0.05) 0%, 
+    rgba(168, 85, 247, 0.1) 50%, 
+    rgba(34, 197, 94, 0.05) 100%);
+  border-radius: 1rem;
+  margin-bottom: 2rem;
+  overflow: hidden;
+  min-height: 120px;
+  border: 1px solid rgba(59, 130, 246, 0.1);
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.08);
+}
+
+.ai-header-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+}
+
+.neural-network-bg {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    radial-gradient(circle at 20% 30%, rgba(59, 130, 246, 0.1) 1px, transparent 1px),
+    radial-gradient(circle at 80% 70%, rgba(34, 197, 94, 0.1) 1px, transparent 1px),
+    radial-gradient(circle at 60% 20%, rgba(168, 85, 247, 0.1) 1px, transparent 1px);
+  background-size: 50px 50px, 80px 80px, 60px 60px;
+  animation: networkFloat 20s ease-in-out infinite;
+}
+
+.gradient-orbs {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+.orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(30px);
+  opacity: 0.3;
+  animation: orbFloat 15s ease-in-out infinite;
+}
+
+.orb-1 {
+  width: 200px;
+  height: 200px;
+  background: linear-gradient(45deg, #3b82f6, #22c55e);
+  top: -30px;
+  right: -30px;
+  animation-delay: 0s;
+}
+
+.orb-2 {
+  width: 100px;
+  height: 100px;
+  background: linear-gradient(45deg, #a855f7, #3b82f6);
+  bottom: -20px;
+  left: -20px;
+  animation-delay: -5s;
+}
+
+.orb-3 {
+  width: 100px;
+  height: 100px;
+  background: linear-gradient(45deg, #22c55e, #a855f7);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  animation-delay: -10s;
+}
+
+.ai-header-content {
+  position: relative;
+  z-index: 2;
+  padding: 1.5rem 2rem;
+  text-align: center;
+}
+
+.ai-logo-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.ai-brain-icon {
+  position: relative;
+  margin-bottom: 0;
+}
+
+.brain-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  color: #3b82f6;
+  filter: drop-shadow(0 0 20px rgba(59, 130, 246, 0.3));
+  animation: brainPulse 3s ease-in-out infinite;
+}
+
+.brain-pulse {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 2px solid rgba(59, 130, 246, 0.3);
+  border-radius: 50%;
+  animation: pulseRing 2s ease-out infinite;
+}
+
+.neural-connections {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+.connection {
+  position: absolute;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(59, 130, 246, 0.5),
+    transparent);
+  height: 1px;
+  animation: connectionPulse 4s ease-in-out infinite;
+}
+
+.connection-1 {
+  width: 60px;
+  top: 20%;
+  left: -30px;
+  transform: rotate(45deg);
+  animation-delay: 0s;
+}
+
+.connection-2 {
+  width: 50px;
+  bottom: 20%;
+  right: -25px;
+  transform: rotate(-45deg);
+  animation-delay: 1s;
+}
+
+.connection-3 {
+  width: 40px;
+  top: 60%;
+  left: -20px;
+  transform: rotate(135deg);
+  animation-delay: 2s;
+}
+
+.ai-badge {
+  background: linear-gradient(135deg,
+    #3b82f6 0%,
+    #22c55e 100%);
+  padding: 0.25rem 1rem;
+  border-radius: 2rem;
+  position: relative;
+  overflow: hidden;
+}
+
+.ai-badge-text {
+  color: white;
+  font-weight: 700;
+  font-size: 0.75rem; 
+  letter-spacing: 0.1em;
+  position: relative;
+  z-index: 1;
+}
+
+.badge-glow {
+  color: white;
+  font-weight: 700;
+  font-size: 0.875rem;
+  letter-spacing: 0.1em;
+  position: relative;
+  z-index: 1;
+}
+
+.ai-badge::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, 
+    transparent, 
+    rgba(255, 255, 255, 0.2), 
+    transparent);
+  animation: badgeShine 3s ease-in-out infinite;
+}
+
+.ai-title {
+  margin-bottom: 1rem;
+}
+
+.title-gradient {
+  background: linear-gradient(135deg,
+    #3b82f6 0%,
+    #22c55e 50%,
+    #a855f7 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-size: 200% 200%;
+  animation: gradientShift 4s ease-in-out infinite;
+  font-size: 1.85rem;
+  font-weight: 800;
+  line-height: 1.2;
+  display: block;
+}
+
+.ai-subtitle {
+  display: block;
+  font-size: 0.975rem;
+  font-weight: 500;
+  color: #6b7280;
+  margin-top: 0.05rem;
+}
+
+.ai-description {
+  font-size: 0.995rem;
+  color: #6b7280;
+  max-width: 500px;
+  margin: 0 auto 1rem;
+  line-height: 1.6;
+}
+
+.ai-features {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  flex-wrap: wrap;
+}
+
+.feature-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(229, 231, 235, 0.3);
+  border-radius: 2rem;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+  color: #374151;
+}
+
+.feature-item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.2);
+  border-color: rgba(59, 130, 246, 0.5);
+  background: rgba(255, 255, 255, 0.8);
+}
+
+.feature-icon {
+  font-size: 1.25rem;
+  color: #3b82f6;
+}
+
+/* Animations */
+@keyframes networkFloat {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-10px) rotate(1deg); }
+}
+
+@keyframes orbFloat {
+  0%, 100% { transform: translate(0, 0) scale(1); }
+  33% { transform: translate(30px, -30px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.9); }
+}
+
+@keyframes brainPulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+@keyframes pulseRing {
+  0% {
+    transform: translate(-50%, -50%) scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.8);
+    opacity: 0;
+  }
+}
+
+@keyframes connectionPulse {
+  0%, 100% { opacity: 0.2; }
+  50% { opacity: 0.8; }
+}
+
+@keyframes badgeShine {
+  0% { left: -100%; }
+  50%, 100% { left: 100%; }
+}
+
+@keyframes gradientShift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .ai-header-content {
+    padding: 2rem 1rem;
+  }
+  
+  .title-gradient {
+    font-size: 2rem;
+  }
+  
+  .ai-subtitle {
+    font-size: 1rem;
+  }
+  
+  .ai-description {
+    font-size: 1rem;
+  }
+  
+  .ai-features {
+    gap: 1rem;
+  }
+  
+  .feature-item {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+  }
+}
+
+.ai-process-steps {
+  margin-bottom: 2rem;
+  padding: 2rem;
+  background: linear-gradient(135deg,
+    rgba(59, 130, 246, 0.02) 0%,
+    rgba(168, 85, 247, 0.05) 50%,
+    rgba(34, 197, 94, 0.02) 100%);
+  border-radius: 1rem;
+  border: 1px solid rgba(59, 130, 246, 0.1);
+  position: relative;
+  overflow: hidden;
+}
+
+.ai-process-steps::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: 
+    radial-gradient(circle at 20% 20%, rgba(59, 130, 246, 0.05) 0%, transparent 50%),
+    radial-gradient(circle at 80% 80%, rgba(34, 197, 94, 0.05) 0%, transparent 50%);
+  pointer-events: none;
+}
+
+.steps-container {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+}
+
+.step-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  flex: 1;
+  position: relative;
+}
+
+.step-icon {
+  position: relative;
+  width: 60px;
+  height: 60px;
+  margin-bottom: 1rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.step-number {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6, #22c55e);
+  color: white;
+  font-weight: 700;
+  font-size: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 2;
+  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.3);
+}
+
+.step-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.2) 0%, transparent 70%);
+  animation: stepGlow 3s ease-in-out infinite;
+}
+
+.step-content h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  margin-bottom: 0.5rem;
+  background: linear-gradient(135deg, #3b82f6, #22c55e);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.step-content p {
+  font-size: 0.875rem;
+  color: hsl(var(--muted-foreground));
+  line-height: 1.4;
+  max-width: 200px;
+}
+
+.step-connector {
+  position: absolute;
+  top: 30px;
+  left: 60%;
+  width: 80%;
+  height: 2px;
+  background: linear-gradient(90deg,
+    rgba(59, 130, 246, 0.3) 0%,
+    rgba(34, 197, 94, 0.3) 100%);
+  z-index: 1;
+}
+
+.step-connector::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0%;
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6, #22c55e);
+  animation: connectionFlow 4s ease-in-out infinite;
+}
+
+.step-item:last-child .step-connector {
+  display: none;
+}
+
+/* Animations */
+@keyframes stepGlow {
+  0%, 100% { 
+    opacity: 0.5; 
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% { 
+    opacity: 0.8; 
+    transform: translate(-50%, -50%) scale(1.1);
+  }
+}
+
+@keyframes connectionFlow {
+  0% { width: 0%; }
+  50% { width: 100%; }
+  100% { width: 0%; }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .ai-process-steps {
+    padding: 1.5rem 1rem;
+  }
+  
+  .steps-container {
+    flex-direction: column;
+    gap: 2rem;
+  }
+  
+  .step-connector {
+    display: none;
+  }
+  
+  .step-content p {
+    max-width: 300px;
+  }
+  
+  .ai-header-content {
+    padding: 1rem;
+  }
+  
+  .title-gradient {
+    font-size: 1.5rem;
+  }
+}
+
+.ai-info-card {
+  position: relative;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 1rem;
+  padding: 1.5rem 2rem;
+  margin: 1.5rem auto 2rem;
+  max-width: 600px;
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  box-shadow: 
+    0 8px 32px rgba(59, 130, 246, 0.1),
+    inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.ai-info-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg,
+    rgba(59, 130, 246, 0.05) 0%,
+    rgba(168, 85, 247, 0.08) 50%,
+    rgba(34, 197, 94, 0.05) 100%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.ai-info-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 
+    0 12px 40px rgba(59, 130, 246, 0.15),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.info-card-icon {
+  position: relative;
+  z-index: 2;
+  flex-shrink: 0;
+  margin-top: 0.125rem;
+}
+
+.info-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  color: #3b82f6;
+  filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.3));
+  animation: infoIconPulse 3s ease-in-out infinite;
+}
+
+.info-icon-glow {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.2) 0%, transparent 70%);
+  animation: infoGlow 2.5s ease-in-out infinite;
+}
+
+.info-card-content {
+  position: relative;
+  z-index: 2;
+  flex: 1;
+}
+
+.info-card-title {
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+  margin-bottom: 0.5rem;
+  background: linear-gradient(135deg, #3b82f6, #22c55e);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  line-height: 1.3;
+}
+
+.info-card-description {
+  font-size: 0.925rem;
+  color: hsl(var(--muted-foreground));
+  line-height: 1.5;
+  margin: 0;
+}
+
+@keyframes infoIconPulse {
+  0%, 100% { 
+    transform: scale(1);
+    filter: drop-shadow(0 0 8px rgba(59, 130, 246, 0.3));
+  }
+  50% { 
+    transform: scale(1.05);
+    filter: drop-shadow(0 0 12px rgba(59, 130, 246, 0.5));
+  }
+}
+
+@keyframes infoGlow {
+  0%, 100% {
+    opacity: 0.3;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    opacity: 0.6;
+    transform: translate(-50%, -50%) scale(1.2);
+  }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .ai-info-card {
+    flex-direction: column;
+    text-align: center;
+    padding: 1.25rem 1.5rem;
+    margin: 1rem auto 1.5rem;
+  }
+  
+  .info-card-icon {
+    align-self: center;
+    margin-bottom: 0.5rem;
+    margin-top: 0;
+  }
+  
+  .info-card-title {
+    font-size: 1rem;
+  }
+  
+  .info-card-description {
+    font-size: 0.875rem;
+  }
+  
+  .ai-header-content {
+    padding: 1.5rem 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .ai-info-card {
+    padding: 1rem;
+    margin: 0.75rem auto 1rem;
+  }
+  
+  .info-card-description {
+    font-size: 0.8rem;
+    line-height: 1.4;
+  }
+}
+
+/* AI Enhanced Symptoms Card */
+.symptoms-card.ai-enhanced-card {
+  position: relative;
+  background: linear-gradient(135deg,
+    rgba(59, 130, 246, 0.03) 0%,
+    rgba(168, 85, 247, 0.08) 50%,
+    rgba(34, 197, 94, 0.03) 100%);
+  border: 1px solid rgba(59, 130, 246, 0.15);
+  border-radius: 1rem;
+  overflow: hidden;
+  box-shadow: 
+    0 8px 32px rgba(59, 130, 246, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+  margin-bottom: 2rem;
+}
+
+.symptoms-card.ai-enhanced-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 
+    0 12px 40px rgba(59, 130, 246, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  border-color: rgba(59, 130, 246, 0.25);
+}
+
+
+
+
+
+
+.symptoms-header-content {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+}
+
+.symptoms-icon-section {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.symptoms-brain-icon {
+  position: relative;
+}
+
+.stethoscope-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  margin-top:0;
+  color: #3b82f6;
+  filter: drop-shadow(0 0 15px rgba(59, 130, 246, 0.4));
+  animation: symptomsBrainPulse 3s ease-in-out infinite;
+}
+
+.symptoms-pulse {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 4rem;
+  height: 4rem;
+  border: 2px solid rgba(59, 130, 246, 0.3);
+  border-radius: 50%;
+  animation: symptomsPulseRing 2.5s ease-out infinite;
+}
+
+.symptoms-title {
+  margin-bottom: 0;
+  margin-top:0;
+}
+
+.symptoms-title-gradient {
+  background: linear-gradient(135deg,
+    #3b82f6 0%,
+    #22c55e 50%,
+    #a855f7 100%);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-size: 200% 200%;
+  animation: symptomsGradientShift 4s ease-in-out infinite;
+  font-size: 1.5rem;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.symptoms-description {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.95rem;
+  line-height: 1.5;
+  max-width: 500px;
+  margin: 0 auto;
+}
+
+/* Symptoms Content */
+.symptoms-content {
+  padding: 2rem;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.symptoms-categories-container {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.symptom-category-section {
+  background: rgba(255, 255, 255, 0.5);
+  border: 1px solid rgba(59, 130, 246, 0.1);
+  border-radius: 0.75rem;
+  padding: 1.5rem;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.symptom-category-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg,
+    rgba(59, 130, 246, 0.02) 0%,
+    rgba(168, 85, 247, 0.04) 50%,
+    rgba(34, 197, 94, 0.02) 100%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+.symptom-category-section:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 25px rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.category-header {
+  position: relative;
+  z-index: 2;
+  margin-bottom: 1.5rem;
+  text-align: center;
+}
+
+.category-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  background: linear-gradient(135deg, #3b82f6, #22c55e);
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  margin-bottom: 0.75rem;
+  line-height: 1.3;
+}
+
+.category-divider {
+  width: 60px;
+  height: 3px;
+  background: linear-gradient(90deg, #3b82f6, #22c55e);
+  border-radius: 2px;
+  margin: 0 auto;
+  position: relative;
+}
+
+.category-divider::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.6), transparent);
+  animation: dividerShine 3s ease-in-out infinite;
+}
+
+.symptoms-grid {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1rem;
+}
+
+.symptom-item {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(59, 130, 246, 0.08);
+  border-radius: 0.5rem;
+  padding: 1rem;
+  transition: all 0.2s ease;
+  backdrop-filter: blur(5px);
+  position: relative;
+  overflow: hidden;
+}
+
+.symptom-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(135deg,
+    rgba(59, 130, 246, 0.01) 0%,
+    rgba(34, 197, 94, 0.02) 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+
+.symptom-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 15px rgba(59, 130, 246, 0.1);
+  border-color: rgba(59, 130, 246, 0.2);
+}
+
+.symptom-item:hover::before {
+  opacity: 1;
+}
+
+.symptom-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  position: relative;
+  z-index: 2;
+}
+
+.symptom-checkbox input[type="checkbox"] {
+  appearance: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  border: 2px solid rgba(59, 130, 246, 0.3);
+  border-radius: 0.25rem;
+  background: rgba(255, 255, 255, 0.8);
+  position: relative;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+.symptom-checkbox input[type="checkbox"]:hover {
+  border-color: rgba(59, 130, 246, 0.6);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+}
+
+.symptom-checkbox input[type="checkbox"]:checked {
+  background: linear-gradient(135deg, #3b82f6, #22c55e);
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+}
+
+.symptom-checkbox input[type="checkbox"]:checked::after {
+  content: '✓';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 700;
+  animation: checkmarkPop 0.3s ease;
+}
+
+@keyframes checkmarkPop {
+  0% {
+    transform: translate(-50%, -50%) scale(0);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.2);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+/* Selected State Enhancement */
+.symptom-item:has(input[type="checkbox"]:checked) {
+  background: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.3);
+  box-shadow: 0 4px 20px rgba(59, 130, 246, 0.15);
+  transform: translateY(-2px);
+}
+
+.symptom-item:has(input[type="checkbox"]:checked) .symptom-label {
+  color: #3b82f6;
+  font-weight: 600;
+}
+
+.symptom-item:has(input[type="checkbox"]:checked)::before {
+  opacity: 1;
+  background: linear-gradient(135deg,
+    rgba(59, 130, 246, 0.05) 0%,
+    rgba(34, 197, 94, 0.08) 100%);
+}
+
+
+.symptom-label {
+  font-size: 0.925rem;
+  font-weight: 500;
+  color: hsl(var(--foreground));
+  cursor: pointer;
+  line-height: 1.4;
+  transition: color 0.2s ease;
+  text-transform: capitalize;
+}
+
+.symptom-item:hover .symptom-label {
+  color: #3b82f6;
+}
+
+/* Animations */
+@keyframes symptomsNetworkFloat {
+  0%, 100% { 
+    transform: translateY(0px) rotate(0deg); 
+  }
+  50% { 
+    transform: translateY(-8px) rotate(0.5deg); 
+  }
+}
+
+@keyframes symptomsOrbFloat {
+  0%, 100% { 
+    transform: translate(0, 0) scale(1); 
+  }
+  33% { 
+    transform: translate(20px, -20px) scale(1.05); 
+  }
+  66% { 
+    transform: translate(-15px, 15px) scale(0.95); 
+  }
+}
+
+@keyframes symptomsBrainPulse {
+  0%, 100% { 
+    transform: scale(1);
+    filter: drop-shadow(0 0 15px rgba(59, 130, 246, 0.4));
+  }
+  50% { 
+    transform: scale(1.05);
+    filter: drop-shadow(0 0 20px rgba(59, 130, 246, 0.6));
+  }
+}
+
+@keyframes symptomsPulseRing {
+  0% {
+    transform: translate(-50%, -50%) scale(0.8);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1.6);
+    opacity: 0;
+  }
+}
+
+@keyframes symptomsGradientShift {
+  0%, 100% { 
+    background-position: 0% 50%; 
+  }
+  50% { 
+    background-position: 100% 50%; 
+  }
+}
+
+@keyframes dividerShine {
+  0% { 
+    transform: translateX(-100%); 
+  }
+  50%, 100% { 
+    transform: translateX(100%); 
+  }
+}
+
+/* Loading State */
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 0.75rem;
+  border: 1px dashed rgba(59, 130, 246, 0.2);
+}
+
+.loading-container .animate-spin {
+  width: 2rem;
+  height: 2rem;
+  color: #3b82f6;
+  margin-bottom: 1rem;
+  filter: drop-shadow(0 0 10px rgba(59, 130, 246, 0.3));
+}
+
+.loading-container p {
+  color: hsl(var(--muted-foreground));
+  font-size: 0.95rem;
+  font-weight: 500;
+}
+
+/* No Symptoms State */
+.no-symptoms {
+  text-align: center;
+  color: hsl(var(--muted-foreground));
+  font-style: italic;
+  padding: 2rem;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 0.5rem;
+  border: 1px dashed rgba(59, 130, 246, 0.2);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .symptoms-card-header {
+    padding: 1.5rem 1rem;
+  }
+  
+  .symptoms-content {
+    padding: 1.5rem 1rem;
+  }
+  
+  .symptoms-title-gradient {
+    font-size: 1.25rem;
+  }
+  
+  .symptoms-description {
+    font-size: 0.875rem;
+  }
+  
+  .symptom-category-section {
+    padding: 1rem;
+  }
+  
+  .category-title {
+    font-size: 1.125rem;
+  }
+  
+  .symptoms-grid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+  
+  .symptom-item {
+    padding: 0.75rem;
+  }
+  
+  .symptom-label {
+    font-size: 0.875rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .symptoms-card-header {
+    padding: 1rem 0.75rem;
+  }
+  
+  .symptoms-content {
+    padding: 1rem 0.75rem;
+  }
+  
+  .symptoms-categories-container {
+    gap: 1.5rem;
+  }
+  
+  .symptom-category-section {
+    padding: 0.75rem;
+  }
+  
+  .category-header {
+    margin-bottom: 1rem;
+  }
+  
+  .symptoms-title-gradient {
+    font-size: 1.125rem;
+  }
+  
+  .stethoscope-icon {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+  
+  .symptoms-pulse {
+    width: 1.75rem;
+    height: 1.75rem;
+  }
+}
+
+/* Enhanced Visual Effects */
+.symptom-category-section::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    rgba(59, 130, 246, 0.3) 50%,
+    transparent 100%);
+  animation: categoryGlow 4s ease-in-out infinite;
+}
+
+@keyframes categoryGlow {
+  0%, 100% {
+    opacity: 0.3;
+    transform: scaleX(0.8);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scaleX(1);
+  }
+}
+
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+  .symptoms-card.ai-enhanced-card {
+    border-width: 2px;
+    border-color: #3b82f6;
+  }
+  
+  .symptom-item {
+    border-width: 2px;
+  }
+  
+  .symptom-checkbox input[type="checkbox"] {
+    border-width: 3px;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .symptoms-neural-bg,
+  .symptoms-orb,
+  .stethoscope-icon,
+  .symptoms-pulse,
+  .symptoms-title-gradient,
+  .category-divider::after,
+  .categoryGlow {
+    animation: none;
+  }
+  
+  .symptom-item,
+  .symptom-category-section,
+  .symptoms-card.ai-enhanced-card {
+    transition: none;
+  }
+}
+

@@ -37,6 +37,9 @@ class DiagnosticState(TypedDict):
     # Messages for LLM interactions
     messages: Annotated[List[BaseMessage], add_messages]
     
+    # Track previously asked questions
+    asked_questions: List[Dict[str, Any]]
+    
     # Metadata
     session_id: str
     user_id: Optional[str]

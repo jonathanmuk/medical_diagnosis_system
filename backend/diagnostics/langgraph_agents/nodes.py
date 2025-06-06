@@ -2,6 +2,7 @@ from typing import Dict, Any, List
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_ollama import ChatOllama
 from .state import DiagnosticState, QuestionSchema, PredictionSchema
 from .tools import create_medical_tools
 import json
@@ -69,19 +70,38 @@ class MedicalAgentNodes:
     def questioning_node(self, state: DiagnosticState) -> DiagnosticState:
         """Generate clarifying questions based on predictions"""
         
+        questions_asked = state.get("questions_asked", 0)
+        max_questions = state.get("max_questions", 5)
+
+        # strict less than comparison
+        if questions_asked >= max_questions:
+            print(f"Question limit reached: {questions_asked}/{max_questions}")
+            return {
+                **state,
+                "clarifying_questions": [],
+                "current_step": "questions_limit_reached",
+                "needs_more_questions": False,
+                "reasoning_steps": state.get("reasoning_steps", []) + [f"Question limit reached ({questions_asked}/{max_questions})"]
+            }
         # Calculate remaining questions
         remaining_questions = min(
-            state.get("max_questions", 5) - state.get("questions_asked", 0),
+            max_questions - questions_asked,
             3  # Max 3 questions per round
         )
         
         if remaining_questions <= 0:
+            print("No remaining questions allowed")
             return {
                 **state,
                 "clarifying_questions": [],
-                "current_step": "questions_generated",
+                "current_step": "no_more_questions_allowed",
+                "needs_more_questions": False,
                 "reasoning_steps": state.get("reasoning_steps", []) + ["No more questions needed - limit reached"]
             }
+            
+        # Get previously asked questions to avoid duplicates
+        asked_questions = state.get("asked_questions", [])
+        asked_question_texts = {q.get("question_text", "") for q in asked_questions}
         
         prompt = ChatPromptTemplate.from_messages([
             ("system", """You are a Medical Questioning Specialist. Generate {remaining_questions} clarifying questions 
@@ -91,8 +111,13 @@ class MedicalAgentNodes:
             Selected symptoms: {selected_symptoms}
             Questions already asked: {questions_asked}
             
-            Generate exactly {remaining_questions} high-priority yes/no questions that would help 
-            confirm or rule out the predicted diseases.
+            PREVIOUSLY ASKED QUESTIONS (DO NOT REPEAT THESE):
+            {previously_asked}
+            
+            Generate exactly {remaining_questions} high-priority yes/no questions that:
+             1. Have NOT been asked before
+            2. Would help confirm or rule out the predicted diseases
+            3. Focus on different symptoms/aspects than previous questions
             
             CRITICAL: Return ONLY a valid JSON array with this exact format:
             [
@@ -109,14 +134,22 @@ class MedicalAgentNodes:
             
             Focus on symptoms that would help differentiate between the top predicted diseases.
             """),
-            ("human", "Generate {remaining_questions} clarifying questions for the current diagnostic state.")
+            ("human", "Generate {remaining_questions} NEW clarifying questions that haven't been asked before")
         ])
+        
+        # Format previously asked questions for the prompt
+        previously_asked_text = "\n".join([
+            f"- {q.get('question_text', 'Unknown question')}" 
+            for q in asked_questions
+        ]) if asked_questions else "None"
         
         messages = prompt.format_messages(
             initial_predictions=json.dumps(state["initial_predictions"], indent=2),
             selected_symptoms=state["selected_symptoms"],
             questions_asked=state.get("questions_asked", 0),
-            remaining_questions=remaining_questions
+            remaining_questions=remaining_questions,
+            previously_asked=previously_asked_text,
+            start_id=len(asked_questions) + 1
         )
         
         response = self.llm.invoke(messages)  # Remove tools for simpler response
@@ -180,45 +213,37 @@ class MedicalAgentNodes:
             print(f"Error parsing questions: {e}")
             print(f"Content that failed to parse: {content}")
         
-        # Fallback: Generate questions programmatically if parsing fails
+        # Fallback
         if not questions:
-            print("Generating fallback questions...")
-            top_diseases = list(state["initial_predictions"].keys())[:2]  # Top 2 diseases
-            
-            fallback_questions = [
-                {
-                    "id": "q1",
-                    "question": "Have you experienced any nausea or vomiting?",
-                    "question_text": "Have you experienced any nausea or vomiting?",
-                    "type": "yes_no",
-                    "related_disease": top_diseases[0] if top_diseases else "General",
-                    "symptom_checking": "nausea",
-                    "priority": 1,
-                    "required": True
-                },
-                {
-                    "id": "q2", 
-                    "question": "Do you have any abdominal pain or discomfort?",
-                    "question_text": "Do you have any abdominal pain or discomfort?",
-                    "type": "yes_no",
-                    "related_disease": top_diseases[1] if len(top_diseases) > 1 else "General",
-                    "symptom_checking": "abdominal pain",
-                    "priority": 1,
-                    "required": True
-                }
-            ]
-            
-            questions = fallback_questions[:remaining_questions]
+            print("No valid questions generated - ending questioning phase")
+            return {
+                **state,
+                "clarifying_questions": [],
+                "current_step": "no_more_questions",
+                "needs_more_questions": False,
+                "reasoning_steps": state.get("reasoning_steps", []) + ["No additional questions could be generated"]
+            }
         
         print(f"Final questions generated: {len(questions)} questions")
         for q in questions:
             print(f"  - {q['question_text']}")
+            
+        # Filter out any duplicate questions before returning
+        filtered_questions = []
+        for q in questions:
+            question_text = q.get("question_text", "")
+            if question_text not in asked_question_texts:
+                filtered_questions.append(q)
         
-        reasoning_step = f"Questioning Agent: Generated {len(questions)} clarifying questions"
+        # Update asked_questions list
+        updated_asked_questions = asked_questions + filtered_questions
+        
+        reasoning_step = f"Questioning Agent: Generated {len(filtered_questions)} NEW clarifying questions"
         
         return {
             **state,
-            "clarifying_questions": questions,
+            "clarifying_questions": filtered_questions,
+            "asked_questions": updated_asked_questions, 
             "current_step": "questions_generated",
             "reasoning_steps": state.get("reasoning_steps", []) + [reasoning_step],
             "agent_outputs": {**state.get("agent_outputs", {}), "questioning": response.content}
@@ -527,6 +552,9 @@ class MedicalAgentNodes:
     
     @traceable(name="evaluation_agent")
     def evaluator_node(self, state: DiagnosticState) -> DiagnosticState:
+        questions_asked = state.get("questions_asked", 0)
+        max_questions = state.get("max_questions", 5)
+        
         """Evaluate overall confidence in predictions"""
         
         prompt = ChatPromptTemplate.from_messages([
@@ -601,8 +629,11 @@ class MedicalAgentNodes:
         # Need more questions if no high confidence predictions and haven't reached max questions
         needs_more_questions = (
             high_confidence_count == 0 and 
-            state.get("questions_asked", 0) < state.get("max_questions", 5)
+            questions_asked < max_questions
         )
+        
+        if questions_asked >= max_questions:
+            needs_more_questions = False
         
         reasoning_step = f"Evaluator Agent: Assessed confidence for {len(confidence_scores)} predictions"
         

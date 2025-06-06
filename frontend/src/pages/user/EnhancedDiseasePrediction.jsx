@@ -237,22 +237,81 @@ const handleAnswerSubmit = async (answers) => {
       <Header activePath="/enhanced-disease-prediction" />
       
       <div className="enhanced-disease-predictor-container">
-        <div className="page-header">
-          <h1>
-            <BrainIcon className="icon" />
-            AI-Enhanced Disease Prediction
-          </h1>
-          <p>Get detailed AI-powered analysis of your symptoms with explanations and follow-up questions</p>
-        </div>
-        
-        <div className="info-card enhanced">
-          <InfoIcon className="info-icon" />
-          <div>
-            <h3>How it works</h3>
-            <p>
-              This enhanced predictor uses advanced AI to analyze your symptoms, provide detailed explanations,
-              and ask follow-up questions to improve the accuracy of your diagnosis.
+        <div className="ai-page-header">
+          <div className="ai-header-background">
+            <div className="neural-network-bg"></div>
+            <div className="gradient-orbs">
+              <div className="orb orb-1"></div>
+              <div className="orb orb-2"></div>
+            </div>
+          </div>
+          <div className="ai-header-content">
+            <div className="ai-logo-section">
+              <div className="ai-brain-icon">
+                <BrainIcon className="brain-icon" />
+                <div className="brain-pulse"></div>
+              </div>
+              <div className="ai-badge">
+                <span className="ai-badge-text">AI-POWERED</span>
+              </div>
+            </div>
+            <h1 className="ai-title">
+              <span className="title-gradient">Enhanced Disease Prediction</span>
+              <span className="ai-subtitle">Advanced Multi-Agent Analysis</span>
+            </h1>
+            <p className="ai-description">
+              Leveraging cutting-edge AI technology for transparent, explainable medical insights
             </p>
+
+            <div className="ai-info-card">
+              <div className="info-card-icon">
+                <InfoIcon className="info-icon" />
+                <div className="info-icon-glow"></div>
+              </div>
+              <div className="info-card-content">
+                <h3 className="info-card-title">How it works</h3>
+                <p className="info-card-description">
+                  This enhanced predictor uses advanced AI to analyze your symptoms, provide detailed explanations,
+                  and ask follow-up questions to improve the accuracy of your diagnosis.
+                </p>
+              </div>
+            </div>
+            <div className="steps-container">
+            <div className="step-item">
+              <div className="step-icon">
+                <div className="step-number">1</div>
+                <div className="step-glow"></div>
+              </div>
+              <div className="step-content">
+                <h3>Submit Symptoms</h3>
+                <p>Select your symptoms from our comprehensive database</p>
+              </div>
+              <div className="step-connector"></div>
+            </div>
+            
+            <div className="step-item">
+              <div className="step-icon">
+                <div className="step-number">2</div>
+                <div className="step-glow"></div>
+              </div>
+              <div className="step-content">
+                <h3>AI Analysis</h3>
+                <p>Multi-agent system analyzes and asks clarifying questions</p>
+              </div>
+              <div className="step-connector"></div>
+            </div>
+            
+            <div className="step-item">
+              <div className="step-icon">
+                <div className="step-number">3</div>
+                <div className="step-glow"></div>
+              </div>
+              <div className="step-content">
+                <h3>Enhanced Results</h3>
+                <p>Get detailed predictions with transparent explanations</p>
+              </div>
+            </div>
+          </div>
           </div>
         </div>
         
@@ -265,15 +324,32 @@ const handleAnswerSubmit = async (answers) => {
         )}
         
         <form onSubmit={handleSubmit} className="predictor-form">
-          <Card className="symptoms-card">
-            <CardHeader>
-              <CardTitle>Select Your Symptoms</CardTitle>
-              <CardDescription>
-                Browse through categories and check all symptoms you're experiencing
-              </CardDescription>
+          <Card className="symptoms-card ai-enhanced-card">
+            <CardHeader className="symptoms-card-header">
+              <div className="symptoms-header-background">
+                <div className="symptoms-neural-bg"></div>
+                <div className="symptoms-gradient-orbs">
+                  <div className="symptoms-orb symptoms-orb-1"></div>
+                  <div className="symptoms-orb symptoms-orb-2"></div>
+                </div>
+              </div>
+              <div className="symptoms-header-content">
+                <div className="symptoms-icon-section">
+                  <div className="symptoms-brain-icon">
+                    <StethoscopeIcon className="stethoscope-icon" />
+                    <div className="symptoms-pulse"></div>
+                  </div>
+                </div>
+                <CardTitle className="symptoms-title">
+                  <span className="symptoms-title-gradient">Select Your Symptoms</span>
+                </CardTitle>
+                <CardDescription className="symptoms-description">
+                  Browse through categories and check all symptoms you're experiencing
+                </CardDescription>
+              </div>
             </CardHeader>
             
-            <CardContent>
+            <CardContent className="symptoms-content">
               {fetchingSymptoms ? (
                 <div className="loading-container">
                   <LoaderIcon className="animate-spin" />
@@ -288,38 +364,37 @@ const handleAnswerSubmit = async (answers) => {
                   </AlertDescription>
                 </Alert>
               ) : (
-                <Accordion type="multiple" className="symptoms-accordion">
+                <div className="symptoms-categories-container">
                   {Object.entries(symptomCategories).map(([category, symptoms], index) => (
-                    <AccordionItem value={`item-${index}`} key={category}>
-                      <AccordionTrigger className="category-trigger">
-                        {category}
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <div className="symptoms-grid">
-                          {Array.isArray(symptoms) ? symptoms.map(symptom => (
-                            <div className="symptom-item" key={symptom}>
-                              <div className="symptom-checkbox">
-                                <Checkbox 
-                                  id={`symptom-${symptom}`}
-                                  checked={selectedSymptoms.includes(symptom)}
-                                  onCheckedChange={() => handleSymptomToggle(symptom)}
-                                />
-                                <Label 
-                                  htmlFor={`symptom-${symptom}`}
-                                  className="symptom-label"
-                                >
-                                  {symptom.replace(/_/g, ' ')}
-                                </Label>
-                              </div>
+                    <div key={category} className="symptom-category-section">
+                      <div className="category-header">
+                        <h3 className="category-title">{category}</h3>
+                        <div className="category-divider"></div>
+                      </div>
+                      <div className="symptoms-grid">
+                        {Array.isArray(symptoms) ? symptoms.map(symptom => (
+                          <div className="symptom-item" key={symptom}>
+                            <div className="symptom-checkbox">
+                              <Checkbox
+                                id={`symptom-${symptom}`}
+                                checked={selectedSymptoms.includes(symptom)}
+                                onCheckedChange={() => handleSymptomToggle(symptom)}
+                              />
+                              <Label
+                                htmlFor={`symptom-${symptom}`}
+                                className="symptom-label"
+                              >
+                                {symptom.replace(/_/g, ' ')}
+                              </Label>
                             </div>
-                          )) : (
-                            <p className="no-symptoms">No symptoms in this category</p>
-                          )}
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
+                          </div>
+                        )) : (
+                          <p className="no-symptoms">No symptoms in this category</p>
+                        )}
+                      </div>
+                    </div>
                   ))}
-                </Accordion>
+                </div>
               )}
             </CardContent>
           </Card>
@@ -348,7 +423,7 @@ const handleAnswerSubmit = async (answers) => {
                   ))}
                 </div>
               ) : (
-                                <p className="no-selected-symptoms">
+                  <p className="no-selected-symptoms">
                   No symptoms selected yet. Please select symptoms from the categories above.
                 </p>
               )}
