@@ -6,6 +6,7 @@ from langchain_ollama import ChatOllama
 from .state import DiagnosticState, QuestionSchema, PredictionSchema
 from .tools import create_medical_tools
 import json
+from .activity_tracker import AgentActivityTracker
 import os
 from datetime import datetime
 from langsmith.run_helpers import traceable
@@ -20,51 +21,102 @@ class MedicalAgentNodes:
         )
         self.tools = create_medical_tools(vector_db)
         self.llm_with_tools = self.llm.bind_tools(self.tools)
+        self.activity_tracker = AgentActivityTracker()
         
+    
     @traceable(name="orchestrator_agent")
     def orchestrator_node(self, state: DiagnosticState) -> DiagnosticState:
         """Orchestrator agent that coordinates the diagnostic process"""
         
+        # Medical context retrieval
+        top_disease = max(state["initial_predictions"], key=lambda x: state["initial_predictions"][x]['probability'])
+        medical_context = self.vector_db.search(f"Clinical presentation of {top_disease}", k=3)
+
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a Medical Diagnostic Orchestrator with years of experience 
-            in analyzing symptoms and coordinating diagnostic processes. Your job is to:
-            
-            1. Analyze initial disease predictions and symptoms
-            2. Determine if more information is needed
-            3. Set confidence thresholds and workflow parameters
-            4. Add reasoning steps for transparency
-            
-            Current predictions: {initial_predictions}
-            Selected symptoms: {selected_symptoms}
-            
-            Analyze the situation and determine next steps."""),
-            ("human", "Please analyze the current diagnostic state and provide coordination guidance.")
+        ("system", """You are a Medical Diagnostic Orchestrator. Analyze the situation using this medical context.
+        
+        MEDICAL CONTEXT:
+        {medical_context}
+        
+        Current predictions: {initial_predictions}
+        Selected symptoms: {selected_symptoms}
+        
+        Provide detailed analysis including:
+        1. Which symptoms are most diagnostically significant
+        2. What key differentiating symptoms are missing
+        3. Which diseases need further investigation and why
+        4. Confidence assessment with medical justification
+        
+        Format your response as:
+        ANALYSIS: [detailed medical analysis]
+        KEY_SYMPTOMS: [most important symptoms for diagnosis]
+        MISSING_INFO: [what information would help differentiate]
+        CONFIDENCE_REASONING: [why current confidence is high/medium/low]
+        """),
+        ("human", "Analyze the diagnostic situation with detailed medical reasoning.")
         ])
         
+        # FIX: Include medical_context in format_messages call
         messages = prompt.format_messages(
+            medical_context=medical_context,  # This was missing!
             initial_predictions=state["initial_predictions"],
             selected_symptoms=state["selected_symptoms"]
         )
         
         response = self.llm.invoke(messages)
         
-        # Update state with orchestrator analysis
-        reasoning_step = f"Orchestrator Analysis: {response.content}"
+        # Parse structured reasoning
+        content = response.content
+        analysis = self._extract_section(content, "ANALYSIS")
+        key_symptoms = self._extract_section(content, "KEY_SYMPTOMS")
+        missing_info = self._extract_section(content, "MISSING_INFO")
+        confidence_reasoning = self._extract_section(content, "CONFIDENCE_REASONING")
         
         # Determine if we need more questions based on prediction confidence
         max_confidence = 0
         if state["initial_predictions"]:
             max_confidence = max(pred.get("probability", 0) for pred in state["initial_predictions"].values())
         
+        # Detailed reasoning step
+        detailed_reasoning = {
+            "agent": "orchestrator",
+            "step": "initial_analysis",
+            "timestamp": datetime.now().isoformat(),
+            "medical_analysis": analysis,
+            "key_symptoms_identified": key_symptoms,
+            "missing_information": missing_info,
+            "medical_context": medical_context,
+            "vector_db_query": f"Clinical presentation of {top_disease}",
+            "confidence_reasoning": confidence_reasoning,
+            "predictions_analyzed": list(state["initial_predictions"].keys()),
+            "decision": "proceed_with_questioning" if max_confidence < 0.8 else "high_confidence_achieved"
+        }
+        
         needs_more_questions = max_confidence < state.get("confidence_threshold", 0.8)
         
         return {
-            **state,
-            "current_step": "orchestration_complete",
-            "needs_more_questions": needs_more_questions,
-            "reasoning_steps": state.get("reasoning_steps", []) + [reasoning_step],
-            "agent_outputs": {**state.get("agent_outputs", {}), "orchestrator": response.content}
-        }
+        **state,
+        "current_step": "orchestration_complete",
+        "needs_more_questions": max_confidence < state.get("confidence_threshold", 0.8),
+        "reasoning_steps": state.get("reasoning_steps", []) + [detailed_reasoning],
+        "agent_outputs": {**state.get("agent_outputs", {}), "orchestrator": response.content},
+        "vector_db_usage": [{"query": f"Clinical presentation of {top_disease}", "results": medical_context}]  # Track DB usage
+    }
+        
+    def _extract_section(self, content: str, section_name: str) -> str:
+        """Extract a specific section from structured LLM response"""
+        try:
+            start = content.find(f"{section_name}:")
+            if start == -1:
+                return "Not specified"
+            start += len(section_name) + 1
+            end = content.find("\n", start)
+            if end == -1:
+                end = len(content)
+            return content[start:end].strip()
+        except:
+            return "Not specified"
+    
     
     @traceable(name="questioning_agent")
     def questioning_node(self, state: DiagnosticState) -> DiagnosticState:
@@ -279,70 +331,88 @@ class MedicalAgentNodes:
                     **state,
                     "current_step": "no_questions_needed"
                 }
-
+                
+    
     @traceable(name="response_integration_agent")
     def response_integration_node(self, state: DiagnosticState) -> DiagnosticState:
-        """Process user responses and update symptom profile"""
+        """Process user responses with detailed medical reasoning"""
+        # Track activity
+        activity_id = self.activity_tracker.start_activity(
+            "response_integration", 
+            "processing_answers",
+            {"num_responses": len(state.get("user_responses", {}))}
+        )
         
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a Response Integration Specialist. Process user responses 
-            to clarifying questions and update the symptom profile.
+            ("system", """You are a Response Integration Specialist. Process each user response with detailed medical reasoning.
             
-            Original symptoms: {selected_symptoms}
-            Questions asked: {questions}
-            User responses: {user_responses}
+            For each response, explain:
+            1. MEDICAL_SIGNIFICANCE: Why this answer is medically important
+            2. DISEASE_IMPACT: How this affects each disease probability
+            3. SYMPTOM_CHANGES: What symptoms to add/remove and why
+            4. DIFFERENTIAL_IMPACT: How this helps differentiate between diseases
             
-            Analyze each response and determine:
-            1. Which new symptoms to add based on "yes" responses
-            2. Which symptoms to remove based on "no" responses  
-            3. Updated complete symptom list
+            Questions and Responses: {qa_pairs}
+            Current Diseases: {diseases}
             
-            Return ONLY a valid JSON object:
-            {{
-                "updated_symptoms": ["symptom1", "symptom2"],
-                "added_symptoms": ["new_symptom"],
-                "removed_symptoms": ["removed_symptom"],
-                "analysis": "Brief analysis of changes"
-            }}"""),
-            ("human", "Process the user responses and update the symptom profile.")
+            Provide detailed medical reasoning for each response."""),
+            ("human", "Process responses with detailed medical reasoning.")
         ])
         
+        # Create Q&A pairs for better context
+        qa_pairs = []
+        questions = state.get("clarifying_questions", [])
+        responses = state.get("user_responses", {})
+        
+        for q in questions:
+            q_id = q.get("id", "")
+            if q_id in responses:
+                qa_pairs.append({
+                    "question": q.get("question_text", ""),
+                    "answer": responses[q_id],
+                    "related_disease": q.get("related_disease", ""),
+                    "symptom_focus": q.get("symptom_checking", "")
+                })
+        
         messages = prompt.format_messages(
-            selected_symptoms=state["selected_symptoms"],
-            questions=json.dumps(state.get("clarifying_questions", []), indent=2),
-            user_responses=json.dumps(state.get("user_responses", {}), indent=2)
+            qa_pairs=json.dumps(qa_pairs, indent=2),
+            diseases=list(state.get("initial_predictions", {}).keys())
         )
         
         response = self.llm_with_tools.invoke(messages)
         
-        # Parse response integration results
-        try:
-            content = response.content
-            if "```json" in content:
-                json_start = content.find("```json") + 7
-                json_end = content.find("```", json_start)
-                content = content[json_start:json_end].strip()
-            elif "{" in content and "}" in content:
-                start = content.find("{")
-                end = content.rfind("}") + 1
-                content = content[start:end]
-            
-            integration_result = json.loads(content)
-            updated_symptoms = integration_result.get("updated_symptoms", state["selected_symptoms"])
-            
-        except (json.JSONDecodeError, KeyError) as e:
-            print(f"Error parsing integration result: {e}")
-            updated_symptoms = state["selected_symptoms"]
-            integration_result = {"analysis": "Error processing responses"}
+        # Create detailed reasoning
+        detailed_reasoning = {
+            "agent": "response_integration",
+            "step": "processing_user_responses",
+            "timestamp": datetime.now().isoformat(),
+            "responses_processed": len(qa_pairs),
+            "medical_reasoning": response.content,
+            "qa_analysis": qa_pairs,
+            "symptom_changes": {
+                "rationale": "Based on user responses to clarifying questions",
+                "medical_logic": response.content
+            }
+        }
         
-        reasoning_step = f"Response Integration: {integration_result.get('analysis', 'Processed user responses')}"
+        content = response.content
+        integration_result = json.loads(content)
+        updated_symptoms = integration_result.get("updated_symptoms", state["selected_symptoms"])
+        
+        # Complete activity tracking
+        self.activity_tracker.complete_activity(
+            activity_id, 
+            {"responses_processed": len(qa_pairs)},
+            response.content
+        )
         
         return {
             **state,
             "updated_symptoms": updated_symptoms,
-                        "current_step": "responses_integrated",
-            "reasoning_steps": state.get("reasoning_steps", []) + [reasoning_step],
-            "agent_outputs": {**state.get("agent_outputs", {}), "response_integration": response.content}
+            "current_step": "responses_integrated",
+            "reasoning_steps": state.get("reasoning_steps", []) + [detailed_reasoning],
+            "agent_outputs": {**state.get("agent_outputs", {}), "response_integration": response.content},
+            "real_time_activities": self.activity_tracker.get_current_activities()
         }
     
     @traceable(name="refinement_agent")
@@ -483,7 +553,7 @@ class MedicalAgentNodes:
             "agent_outputs": {**state.get("agent_outputs", {}), "validation": response.content}
         }
     
-    @traceable(name="validation_agent")
+    @traceable(name="explanation_agent")
     def explanation_node(self, state: DiagnosticState) -> DiagnosticState:
         """Generate clear explanations for predictions"""
         

@@ -472,33 +472,35 @@ class MedicalDiagnosticGraph:
     def _format_results(self, final_state: Dict[str, Any]) -> Dict[str, Any]:
         if not final_state:
             return {"error": "No final state available"}
-        
+
         # Debug logging
         print(f"Formatting final results. State keys: {list(final_state.keys())}")
-        
+
         # Extract data from all relevant nodes
         state_data = {}
         node_keys = ['evaluator', 'explanation', 'refinement', 'validation', 'response_integration']
-        
+
         for key in node_keys:
             if key in final_state and isinstance(final_state[key], dict):
                 print(f"Found data in {key} node")
                 state_data.update(final_state[key])
-        
+
         # If still no data, try direct extraction
         if not state_data:
             state_data = final_state
             print("Using direct state data")
-        
+
         # Extract all components
-        predictions = state_data.get("refined_predictions", 
+        predictions = state_data.get("refined_predictions",
                                 state_data.get("initial_predictions", {}))
         validation_results = state_data.get("validation_results", {})
         explanations = state_data.get("explanations", {})
         confidence_scores = state_data.get("confidence_scores", {})
-        
-        print(f"Extracted: {len(predictions)} predictions, {len(explanations)} explanations")
-        
+        reasoning_steps = state_data.get("reasoning_steps", [])
+        agent_outputs = state_data.get("agent_outputs", {})
+
+        print(f"Extracted: {len(predictions)} predictions, {len(explanations)} explanations, {len(reasoning_steps)} reasoning steps")
+
         # Create comprehensive results
         final_predictions = {}
         for disease, prediction_data in predictions.items():
@@ -508,7 +510,7 @@ class MedicalDiagnosticGraph:
             else:
                 probability = float(prediction_data) if prediction_data else 0
                 confidence = "High" if probability > 0.8 else "Medium" if probability > 0.5 else "Low"
-            
+
             final_predictions[disease] = {
                 "probability": probability,
                 "confidence": confidence,
@@ -516,27 +518,36 @@ class MedicalDiagnosticGraph:
                 "validation": validation_results.get(disease, {}),
                 "overall_confidence": confidence_scores.get(disease, {})
             }
-        
+
         result = {
             "type": "diagnosis",
             "session_id": state_data.get("session_id"),
             "predictions": final_predictions,
-            "symptoms_analyzed": state_data.get("updated_symptoms", 
+            "symptoms_analyzed": state_data.get("updated_symptoms",
                                             state_data.get("selected_symptoms", [])),
             "questions_asked": state_data.get("questions_asked", 0),
-            "reasoning_steps": state_data.get("reasoning_steps", []),
+            "reasoning_steps": reasoning_steps,  # Make sure this is included
+            "agent_outputs": agent_outputs,      # Include detailed agent outputs
             "timestamp": state_data.get("timestamp"),
             "status": "completed",
             "prediction_complete": True,
+            "transparency": {  # Add transparency section
+                "workflow_steps": len(reasoning_steps),
+                "agents_involved": list(agent_outputs.keys()),
+                "decision_process": reasoning_steps,
+                "detailed_outputs": agent_outputs
+            },
             "summary": {
                 "total_diseases_analyzed": len(final_predictions),
                 "questions_asked": state_data.get("questions_asked", 0),
-                "confidence_level": "High" if any(p.get("confidence") == "High" for p in final_predictions.values()) else "Medium"
+                "confidence_level": "High" if any(p.get("confidence") == "High" for p in final_predictions.values()) else "Medium",
+                "reasoning_transparency": f"{len(reasoning_steps)} decision steps recorded"
             }
         }
-        
-        print(f"Final result type: {result['type']}, predictions: {len(result['predictions'])}")
+
+        print(f"Final result type: {result['type']}, predictions: {len(result['predictions'])}, reasoning steps: {len(result['reasoning_steps'])}")
         return result
+
     
     def get_session_history(self, session_id: str) -> Dict[str, Any]:
         """Get the history of a diagnostic session"""

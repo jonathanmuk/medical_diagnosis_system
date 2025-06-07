@@ -52,6 +52,7 @@ const EnhancedDiseasePrediction = () => {
   const [sessionId, setSessionId] = useState(null);
   const [showQuestionsDialog, setShowQuestionsDialog] = useState(false);
   const [predictionComplete, setPredictionComplete] = useState(false);
+  const [diagnosticResult, setDiagnosticResult] = useState(null);
 
 
   useEffect(() => {
@@ -126,7 +127,7 @@ const EnhancedDiseasePrediction = () => {
         
         // Set enhanced predictions if available
         if (result.enhanced && result.enhanced_predictions) {
-          setEnhancedPredictions(result.enhanced_predictions);
+          setDiagnosticResult(result);
           setPredictionComplete(!result.clarifying_questions);
         }
         
@@ -183,7 +184,7 @@ const handleAnswerSubmit = async (answers) => {
       }
       
       if (result.enhanced_predictions) {
-        setEnhancedPredictions(result.enhanced_predictions);
+        setDiagnosticResult(result);
         setPredictionComplete(!result.clarifying_questions || result.prediction_complete);
       }
       
@@ -194,7 +195,7 @@ const handleAnswerSubmit = async (answers) => {
       } else {
         setShowQuestionsDialog(false);
         if (result.enhanced_predictions) {
-          setEnhancedPredictions(result.enhanced_predictions);
+          setDiagnosticResult(result);
         }
       }
       
@@ -565,6 +566,66 @@ const handleAnswerSubmit = async (answers) => {
                 </Alert>
               )}
               
+              {hasValidPredictions() && diagnosticResult?.reasoning_steps?.length > 0 && (
+              <Card className="reasoning-steps-card">
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <BrainIcon className="mr-2 h-5 w-5" />
+                    AI Reasoning Process
+                  </CardTitle>
+                  <CardDescription>
+                    Step-by-step explanation of how the AI reached its conclusions
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Accordion type="single" collapsible className="w-full">
+                    {diagnosticResult.reasoning_steps.map((step, index) => {
+                      // Convert step to string if it's not already a string
+                      const stepText = typeof step === 'string' ? step : 
+                                      typeof step === 'object' ? JSON.stringify(step, null, 2) :
+                                      String(step);
+                      
+                      return (
+                        <AccordionItem key={index} value={`step-${index}`}>
+                          <AccordionTrigger>
+                            <div className="flex items-center">
+                              <div className="step-number mr-3">{index + 1}</div>
+                              <span className="step-summary">
+                                {stepText.substring(0, 80)}{stepText.length > 80 ? "..." : ""}
+                              </span>
+                            </div>
+                          </AccordionTrigger>
+                          <AccordionContent>
+                            <div className="reasoning-step-detail">
+                              {typeof step === 'object' ? (
+                                <pre className="whitespace-pre-wrap text-sm bg-gray-50 p-3 rounded">
+                                  {JSON.stringify(step, null, 2)}
+                                </pre>
+                              ) : (
+                                <p className="whitespace-pre-wrap">{stepText}</p>
+                              )}
+                            </div>
+                            {diagnosticResult.agent_outputs && 
+                            diagnosticResult.agent_outputs[`step_${index}`] && (
+                              <div className="agent-output mt-3">
+                                <h4 className="text-sm font-medium">Agent Analysis:</h4>
+                                <pre className="agent-output-content">
+                                  {JSON.stringify(
+                                    diagnosticResult.agent_outputs[`step_${index}`], 
+                                    null, 2
+                                  )}
+                                </pre>
+                              </div>
+                            )}
+                          </AccordionContent>
+                        </AccordionItem>
+                      );
+                    })}
+                  </Accordion>
+                </CardContent>
+              </Card>
+            )}
+
               <Alert className="disclaimer-alert">
                 <ShieldIcon className="h-4 w-4" />
                 <AlertTitle>Important Disclaimer</AlertTitle>

@@ -1,3 +1,4 @@
+import json
 from rest_framework import status, permissions
 from django.conf import settings
 from rest_framework.decorators import api_view, permission_classes, parser_classes
@@ -9,7 +10,6 @@ from .langgraph_agents.api_integration import DiagnosticAPIIntegration
 from .langgraph_agents.config import DiagnosticConfig
 from .vector_db import MedicalKnowledgeDB
 import asyncio
-import json
 
 # Initialize the diagnostic system
 vector_db = MedicalKnowledgeDB()
@@ -24,6 +24,37 @@ if not config_status['valid']:
 diagnostic_api = DiagnosticAPIIntegration(vector_db, DiagnosticConfig.GEMINI_API_KEY)
 
 
+def clean_for_json_serialization(obj):
+    """
+    Recursively clean an object to make it JSON serializable.
+    Removes or converts non-serializable objects like Document instances.
+    """
+    if hasattr(obj, '__dict__') and hasattr(obj, '__class__'):
+        # This is likely a custom object (like Document)
+        if hasattr(obj, 'page_content') and hasattr(obj, 'metadata'):
+            # This looks like a LangChain Document object
+            return {
+                'content': str(obj.page_content) if hasattr(obj, 'page_content') else str(obj),
+                'metadata': clean_for_json_serialization(obj.metadata) if hasattr(obj, 'metadata') else {},
+                'type': 'document'
+            }
+        else:
+            # Try to convert to dict if possible
+            try:
+                return clean_for_json_serialization(obj.__dict__)
+            except:
+                return str(obj)
+    elif isinstance(obj, dict):
+        return {key: clean_for_json_serialization(value) for key, value in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [clean_for_json_serialization(item) for item in obj]
+    elif isinstance(obj, (str, int, float, bool)) or obj is None:
+        return obj
+    else:
+        # For any other type, convert to string
+        return str(obj)
+
+
 @api_view(['POST'])
 @parser_classes([JSONParser])
 def predict_disease_enhanced_view(request):
@@ -34,20 +65,20 @@ def predict_disease_enhanced_view(request):
         selected_symptoms = data.get('symptoms', [])
         patient_info = data.get('patient_info', {})
         max_questions = data.get('max_questions', DiagnosticConfig.MAX_QUESTIONS_DEFAULT)
-        
+
         print(f"Selected symptoms: {selected_symptoms}")
-        
+
         if not selected_symptoms:
             return Response({'error': 'No symptoms provided'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
         # Get initial prediction from ML model
         print("Getting initial prediction...")
         initial_result = predict_disease(selected_symptoms)
         print(f"Initial prediction result: {initial_result}")
-        
+
         if 'error' in initial_result:
             return Response(initial_result, status=status.HTTP_400_BAD_REQUEST)
-        
+
         # If there are no predictions, return early
         if not initial_result or len(initial_result) == 0:
             print("No diseases predicted in initial result")
@@ -55,13 +86,14 @@ def predict_disease_enhanced_view(request):
                 'initial_predictions': initial_result,
                 'enhanced': False,
                 'message': 'No diseases predicted based on the provided symptoms.',
-                'clarifying_questions': []
+                'clarifying_questions': [],
+                'reasoning_steps': ['Initial ML model prediction: No diseases identified']
             })
-        
+
         # Use the LangGraph agent system to enhance the prediction
         try:
             print("Starting LangGraph diagnostic session...")
-            
+
             # Convert initial ML predictions to the format expected by agents
             formatted_predictions = {}
             for disease, disease_data in initial_result.items():
@@ -69,17 +101,17 @@ def predict_disease_enhanced_view(request):
                     probability = disease_data.get('probability', 0.0)
                 else:
                     probability = float(disease_data)
-                
+
                 formatted_predictions[disease] = {
                     'probability': probability,
                     'confidence': 'High' if probability > 0.8 else 'Medium' if probability > 0.5 else 'Low',
                     'source': 'ml_model'
                 }
-            
+
             # Start the diagnostic session
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            
+
             try:
                 enhanced_result = loop.run_until_complete(
                     diagnostic_api.start_diagnosis(
@@ -91,24 +123,20 @@ def predict_disease_enhanced_view(request):
                 )
             finally:
                 loop.close()
-            
+
             print(f"Enhanced result: {enhanced_result}")
-            
-            # Debug the questions in enhanced_result
+
+            # Format the response based on the result type
             if enhanced_result.get('type') == 'question':
                 questions = enhanced_result.get('questions', [])
                 print(f"DEBUG: Found {len(questions)} questions in enhanced result")
-                for i, q in enumerate(questions):
-                    print(f"  Question {i+1}: {q}")
-                
+
                 # Ensure questions are properly formatted
                 formatted_questions = []
                 for q in questions:
                     if isinstance(q, dict):
-                        # Question is already properly formatted
                         formatted_questions.append(q)
                     elif isinstance(q, str):
-                        # Convert string to proper question format
                         formatted_questions.append({
                             'id': f'q{len(formatted_questions) + 1}',
                             'question': q,
@@ -119,15 +147,17 @@ def predict_disease_enhanced_view(request):
                             'priority': 1,
                             'required': True
                         })
-                
-                # Format the response based on the result type
+
                 result = {
                     'initial_predictions': initial_result,
                     'enhanced': True,
                     'status': 'waiting_for_input',
                     'session_id': enhanced_result['session_id'],
                     'progress': enhanced_result.get('progress', {}),
-                    'clarifying_questions': formatted_questions  # Use formatted questions
+                    'clarifying_questions': formatted_questions,
+                    'reasoning_steps': enhanced_result.get('reasoning_steps', []),
+                    'agent_outputs': clean_for_json_serialization(enhanced_result.get('agent_outputs', {})),
+                    'transparency': clean_for_json_serialization(enhanced_result.get('transparency', {}))
                 }
             elif enhanced_result.get('type') == 'diagnosis':
                 # The system has completed the diagnosis
@@ -141,6 +171,8 @@ def predict_disease_enhanced_view(request):
                     'symptoms_analyzed': enhanced_result.get('symptoms_analyzed', selected_symptoms),
                     'questions_asked': enhanced_result.get('questions_asked', 0),
                     'reasoning_steps': enhanced_result.get('reasoning_steps', []),
+                    'agent_outputs': clean_for_json_serialization(enhanced_result.get('agent_outputs', {})),
+                    'transparency': clean_for_json_serialization(enhanced_result.get('transparency', {})),
                     'clarifying_questions': []
                 }
             else:
@@ -149,10 +181,12 @@ def predict_disease_enhanced_view(request):
                     'initial_predictions': initial_result,
                     'enhanced': True,
                     'session_id': enhanced_result.get('session_id'),
-                    'langgraph_result': enhanced_result,
+                    'langgraph_result': clean_for_json_serialization(enhanced_result),
+                    'reasoning_steps': enhanced_result.get('reasoning_steps', []),
+                    'agent_outputs': clean_for_json_serialization(enhanced_result.get('agent_outputs', {})),
                     'clarifying_questions': []
                 }
-        
+
         except Exception as e:
             print(f"Exception during LangGraph enhancement: {str(e)}")
             import traceback
@@ -163,36 +197,45 @@ def predict_disease_enhanced_view(request):
                 'enhanced': False,
                 'enhancement_error': str(e),
                 'status': 'error',
-                'clarifying_questions': []
+                'clarifying_questions': [],
+                'reasoning_steps': [f'Enhancement failed: {str(e)}']
             }
-        
+
         # Save result if user is authenticated
         if request.user.is_authenticated:
             print(f"Saving result for user: {request.user.username}")
+            
+            # Clean the result before saving
+            cleaned_result = clean_for_json_serialization(result)
+            
             diagnostic_result = DiagnosticResult.objects.create(
                 user=request.user,
                 diagnostic_type='enhanced',
-                result_data=result
+                result_data=cleaned_result
             )
-            
+
             SymptomInput.objects.create(
                 diagnostic_result=diagnostic_result,
                 symptoms=selected_symptoms
             )
-            
+
             result['saved'] = True
             result['result_id'] = diagnostic_result.id
-        
+            
+            print(f"DEBUG: reasoning_steps content: {result.get('reasoning_steps', [])}")
+            for i, step in enumerate(result.get('reasoning_steps', [])):
+                print(f"  Step {i}: {type(step)} - {repr(step)}")
+
         print(f"Returning final result with status: {result.get('status', 'unknown')}")
+        print(f"Reasoning steps in result: {len(result.get('reasoning_steps', []))}")
         return Response(result)
-        
+
     except Exception as e:
         print(f"Exception in predict_disease_enhanced_view: {str(e)}")
         import traceback
         traceback.print_exc()
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-   
 
 @api_view(['POST'])
 @parser_classes([JSONParser])
@@ -279,7 +322,10 @@ def answer_clarifying_questions_view(request):
                     'session_id': session_id,
                     'clarifying_questions': formatted_questions,
                     'progress': continued_result.get('progress', {}),
-                    'questions_asked': continued_result.get('questions_asked', 0)
+                    'questions_asked': continued_result.get('questions_asked', 0),
+                    'reasoning_steps': continued_result.get('reasoning_steps', []),
+                    'agent_outputs': clean_for_json_serialization(continued_result.get('agent_outputs', {})),
+                    'transparency': clean_for_json_serialization(continued_result.get('transparency', {}))
                 }
             elif continued_result.get('type') == 'diagnosis':
                 # Diagnosis complete
@@ -293,6 +339,8 @@ def answer_clarifying_questions_view(request):
                     'symptoms_analyzed': continued_result.get('symptoms_analyzed', []),
                     'questions_asked': continued_result.get('questions_asked', 0),
                     'reasoning_steps': continued_result.get('reasoning_steps', []),
+                    'agent_outputs': clean_for_json_serialization(continued_result.get('agent_outputs', {})),
+                    'transparency': clean_for_json_serialization(continued_result.get('transparency', {})),
                     'clarifying_questions': []  # Clear questions when completed
                 }
             else:
@@ -300,7 +348,7 @@ def answer_clarifying_questions_view(request):
                 result = {
                     'enhanced': True,
                     'session_id': session_id,
-                    'langgraph_result': continued_result,
+                    'langgraph_result': clean_for_json_serialization(continued_result),
                     'clarifying_questions': []
                 }
         
@@ -325,10 +373,13 @@ def answer_clarifying_questions_view(request):
                 except (DiagnosticResult.DoesNotExist, SymptomInput.DoesNotExist):
                     pass
             
+            # Clean the result before saving to ensure JSON serialization
+            cleaned_result = clean_for_json_serialization(result)
+            
             new_diagnostic_result = DiagnosticResult.objects.create(
                 user=request.user,
                 diagnostic_type='completed',
-                result_data=result
+                result_data=cleaned_result
             )
             
             # Save symptoms (use analyzed symptoms if available, otherwise original)
@@ -340,6 +391,10 @@ def answer_clarifying_questions_view(request):
             
             result['saved'] = True
             result['result_id'] = new_diagnostic_result.id
+            
+            print(f"DEBUG: reasoning_steps content: {result.get('reasoning_steps', [])}")
+            for i, step in enumerate(result.get('reasoning_steps', [])):
+                print(f"  Step {i}: {type(step)} - {repr(step)}")
         
         return Response(result)
         
@@ -349,7 +404,6 @@ def answer_clarifying_questions_view(request):
         traceback.print_exc()
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-    
 
 @api_view(['GET'])
 def get_session_status_view(request, session_id):
@@ -368,11 +422,15 @@ def get_session_status_view(request, session_id):
         finally:
             loop.close()
         
-        return Response(session_status)
+        # Clean the session status for JSON serialization
+        cleaned_status = clean_for_json_serialization(session_status)
+        
+        return Response(cleaned_status)
         
     except Exception as e:
         print(f"Exception in get_session_status_view: {str(e)}")
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 @api_view(['GET'])
 def get_active_sessions_view(request):
@@ -388,7 +446,10 @@ def get_active_sessions_view(request):
         finally:
             loop.close()
         
-        return Response(active_sessions)
+        # Clean the active sessions for JSON serialization
+        cleaned_sessions = clean_for_json_serialization(active_sessions)
+        
+        return Response(cleaned_sessions)
         
     except Exception as e:
         print(f"Exception in get_active_sessions_view: {str(e)}")
