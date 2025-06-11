@@ -86,30 +86,39 @@ class MedicalDiagnosticGraph:
         # From questioning to human input (with interrupt)
         workflow.add_edge("questioning", "human_input")
         
-        # From human input to response integration
-        workflow.add_edge("human_input", "response_integration")
+        # From human input, check if we have responses
+        workflow.add_conditional_edges(
+            "human_input",
+            self._check_human_input,
+            {
+                "process_responses": "response_integration",
+                "wait_for_input": END  # This creates the interrupt
+            }
+        )
         
-        # From response integration to validation
-        workflow.add_edge("response_integration", "validation")
+        # From response integration to evaluator (to check if we need more questions)
+        workflow.add_edge("response_integration", "evaluator")
         
-        # Parallel processing: validation and refinement can run in parallel
+        
+        # From evaluator, decide whether to ask more questions or proceed to validation
+        workflow.add_conditional_edges(
+            "evaluator",
+            self._should_continue_questioning,
+            {
+                "more_questions": "questioning",
+                "proceed_to_validation": "validation"
+            }
+        )
+        
+        # Linear flow for final processing
         workflow.add_edge("validation", "refinement")
         
         # From refinement to explanation
         workflow.add_edge("refinement", "explanation")
         
         # From explanation to evaluator
-        workflow.add_edge("explanation", "evaluator")
+        workflow.add_edge("explanation", END)
         
-        # From evaluator, decide whether to ask more questions or end
-        workflow.add_conditional_edges(
-            "evaluator",
-            self._should_continue,
-            {
-                "continue": "questioning",
-                "end": END
-            }
-        )
         
         # Compile the graph with or without checkpointer
         compile_kwargs = {}
@@ -119,27 +128,35 @@ class MedicalDiagnosticGraph:
         
         return workflow.compile(**compile_kwargs)
     
+    def _check_human_input(self, state: DiagnosticState) -> str:
+        """Check if we have human responses to process"""
+        user_responses = state.get("user_responses", {})
+        if user_responses:
+            return "process_responses"
+        return "wait_for_input"
+
     def _should_ask_questions(self, state: DiagnosticState) -> str:
         """Determine if we should ask clarifying questions"""
         return "ask_questions" if state.get("needs_more_questions", True) else "skip_questions"
     
-    def _should_continue(self, state: DiagnosticState) -> str:
-        """Determine if we should continue with more questions or end"""
+    def _should_continue_questioning(self, state: DiagnosticState) -> str:
+        """Determine if we should continue with more questions or proceed to validation"""
         needs_more = state.get("needs_more_questions", False)
         questions_asked = state.get("questions_asked", 0)
         max_questions = state.get("max_questions", 5)
         
-        # More explicit conditions
+        # Check if we've reached the question limit
         if questions_asked >= max_questions:
-            print(f"Ending: Question limit reached ({questions_asked}/{max_questions})")
-            return "end"
+            print(f"Question limit reached ({questions_asked}/{max_questions}), proceeding to validation")
+            return "proceed_to_validation"
         
+        # Check if we need more questions based on confidence
         if not needs_more:
-            print(f"Ending: No more questions needed")
-            return "end"
+            print("Sufficient confidence achieved, proceeding to validation")
+            return "proceed_to_validation"
         
-        print(f"Continuing: {questions_asked}/{max_questions} questions asked, needs_more={needs_more}")
-        return "continue"
+        print(f"Need more questions: {questions_asked}/{max_questions} asked")
+        return "more_questions"
         
     @traceable(name="diagnostic_workflow")
     def run_diagnosis(self,
@@ -244,7 +261,7 @@ class MedicalDiagnosticGraph:
                         state_data = value
                         questions = value.get("clarifying_questions", [])
                         break
-                
+                                
                 # If still not found, check for the most recent node output
                 if not questions:
                     possible_keys = ['questioning', 'orchestrator', 'human_input']
@@ -255,14 +272,18 @@ class MedicalDiagnosticGraph:
                                 state_data = node_state
                                 questions = node_state.get("clarifying_questions", [])
                                 break
-        
+
         print(f"Formatting question response. Found {len(questions)} questions")
         print(f"State data keys: {list(state_data.keys()) if state_data else 'No state data'}")
+        
+        # FIXED: Extract reasoning steps from state_data
+        reasoning_steps = state_data.get("reasoning_steps", [])
+        agent_outputs = state_data.get("agent_outputs", {})
         
         # CHECK: If no questions found and we've reached max questions, return completion signal
         questions_asked = state_data.get("questions_asked", 0)
         max_questions = state_data.get("max_questions", 5)
-    
+            
         if not questions and questions_asked >= max_questions:
             print(f"No questions found and max questions reached ({questions_asked}/{max_questions}). Signaling completion.")
             return {
@@ -271,9 +292,11 @@ class MedicalDiagnosticGraph:
                 "message": "All questions completed, proceeding to final diagnosis",
                 "questions_asked": questions_asked,
                 "max_questions": max_questions,
-                "status": "proceeding_to_diagnosis"
+                "status": "proceeding_to_diagnosis",
+                "reasoning_steps": reasoning_steps,  # Include reasoning
+                "agent_outputs": agent_outputs      # Include agent outputs
             }
-    
+            
         # Ensure all questions have proper structure
         formatted_questions = []
         for i, q in enumerate(questions):
@@ -304,7 +327,7 @@ class MedicalDiagnosticGraph:
                 }
                 formatted_questions.append(formatted_q)
                 print(f"Formatted string question {i+1}: {str(q)}")
-        
+                
         # If no questions were formatted, let the workflow complete
         if not formatted_questions:
             print("No questions found, allowing workflow to complete")
@@ -314,9 +337,11 @@ class MedicalDiagnosticGraph:
                 "message": "No additional questions needed",
                 "questions_asked": questions_asked,
                 "max_questions": max_questions,
-                "status": "completing_diagnosis"
+                "status": "completing_diagnosis",
+                "reasoning_steps": reasoning_steps,  # Include reasoning
+                "agent_outputs": agent_outputs      # Include agent outputs
             }
-        
+            
         progress = {
             "questions_asked": state_data.get("questions_asked", 0),
             "max_questions": state_data.get("max_questions", 5),
@@ -331,7 +356,15 @@ class MedicalDiagnosticGraph:
             "questions": formatted_questions,
             "progress": progress,
             "status": "waiting_for_input",
+            "reasoning_steps": reasoning_steps,  # FIXED: Include reasoning steps
+            "agent_outputs": agent_outputs,     # FIXED: Include agent outputs
+            "transparency": {                   # FIXED: Add transparency info
+                "workflow_steps": len(reasoning_steps),
+                "agents_involved": list(agent_outputs.keys()),
+                "current_analysis": reasoning_steps[-1] if reasoning_steps else None
+            }
         }
+
 
     
     @traceable(name="continue_diagnosis")
