@@ -28,33 +28,22 @@ class MedicalDiagnosticGraph:
         else:
             self.langsmith_client = None
             print("LangSmith tracing disabled - API key not found")
-            
-        # Initialize checkpointer for persistence - FIXED
-        self.checkpointer = self._create_checkpointer(db_path)
         
-        # Build the graph
+        self.checkpointer = self._create_checkpointer(db_path)
         self.graph = self._build_graph()
     
     def _create_checkpointer(self, db_path: str):
         """Create SQLite checkpointer with proper connection handling"""
         try:
-            # Ensure the directory exists
             os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
-            
-            # Create a proper SQLite connection
             conn = sqlite3.connect(db_path, check_same_thread=False)
-            
-            # Use the connection directly instead of connection string
             return SqliteSaver(conn)
         except Exception as e:
             print(f"Warning: Could not create checkpointer: {e}")
-            # Return None if checkpointer creation fails
             return None
     
     def _build_graph(self) -> StateGraph:
-        """Build the LangGraph workflow"""
-        
-        # Create the graph
+        """Build the LangGraph workflow with restructured flow"""
         workflow = StateGraph(DiagnosticState)
         
         # Add nodes
@@ -64,22 +53,22 @@ class MedicalDiagnosticGraph:
         workflow.add_node("response_integration", self.nodes.response_integration_node)
         workflow.add_node("validation", self.nodes.validation_node)
         workflow.add_node("refinement", self.nodes.refinement_node)
-        workflow.add_node("explanation", self.nodes.explanation_node)
         workflow.add_node("evaluator", self.nodes.evaluator_node)
+        workflow.add_node("explanation", self.nodes.explanation_node)
         
         # Add tool node for medical tools
         workflow.add_node("tools", ToolNode(self.tools))
         
-        # Define the workflow edges
+        # Define the new workflow structure
         workflow.set_entry_point("orchestrator")
         
-        # From orchestrator, decide whether to ask questions or go to validation
+        # Add conditional edge from orchestrator
         workflow.add_conditional_edges(
             "orchestrator",
-            self._should_ask_questions,
+            self._check_orchestrator_routing,
             {
-                "ask_questions": "questioning",
-                "skip_questions": "validation"
+                "generate_questions": "questioning",
+                "process_responses": "response_integration"  # Direct to response integration if we have responses
             }
         )
         
@@ -89,38 +78,21 @@ class MedicalDiagnosticGraph:
         # From human input, check if we have responses
         workflow.add_conditional_edges(
             "human_input",
-            self._check_human_input,
+            self._check_human_input_routing,
             {
                 "process_responses": "response_integration",
                 "wait_for_input": END  # This creates the interrupt
             }
         )
         
-        # From response integration to evaluator (to check if we need more questions)
-        workflow.add_edge("response_integration", "evaluator")
-        
-        
-        # From evaluator, decide whether to ask more questions or proceed to validation
-        workflow.add_conditional_edges(
-            "evaluator",
-            self._should_continue_questioning,
-            {
-                "more_questions": "questioning",
-                "proceed_to_validation": "validation"
-            }
-        )
-        
-        # Linear flow for final processing
-        workflow.add_edge("validation", "refinement")
-        
-        # From refinement to explanation
-        workflow.add_edge("refinement", "explanation")
-        
-        # From explanation to evaluator
+        # Linear flow after response integration
+        workflow.add_edge("response_integration", "refinement")
+        workflow.add_edge("refinement", "validation")
+        workflow.add_edge("validation", "evaluator")
+        workflow.add_edge("evaluator", "explanation")
         workflow.add_edge("explanation", END)
         
-        
-        # Compile the graph with or without checkpointer
+        # Compile the graph 
         compile_kwargs = {}
         if self.checkpointer is not None:
             compile_kwargs["checkpointer"] = self.checkpointer
@@ -128,35 +100,55 @@ class MedicalDiagnosticGraph:
         
         return workflow.compile(**compile_kwargs)
     
-    def _check_human_input(self, state: DiagnosticState) -> str:
+    def _check_human_input_routing(self, state: DiagnosticState) -> str:
         """Check if we have human responses to process"""
         user_responses = state.get("user_responses", {})
-        if user_responses:
+        current_step = state.get("current_step", "")
+        
+        print(f"🔀 ROUTING CHECK - Current step: {current_step}")
+        print(f"   User responses: {len(user_responses)} items")
+        print(f"   Responses: {user_responses}")
+        
+        if user_responses and len(user_responses) > 0:
+            print("✅ ROUTING: process_responses")
             return "process_responses"
-        return "wait_for_input"
+        
+        # If we have questions but no responses, wait for input
+        questions = state.get("clarifying_questions", [])
+        if questions and not user_responses:
+            print("❓ ROUTING: wait_for_input")
+            return "wait_for_input"
 
-    def _should_ask_questions(self, state: DiagnosticState) -> str:
-        """Determine if we should ask clarifying questions"""
-        return "ask_questions" if state.get("needs_more_questions", True) else "skip_questions"
+        print("❓ ROUTING: wait_for_input (fallback)")
+        return "wait_for_input"
     
+    def _check_orchestrator_routing(self, state: DiagnosticState) -> str:
+        """Check if orchestrator should go to questioning or response processing"""
+        user_responses = state.get("user_responses", {})
+        current_step = state.get("current_step", "")
+        
+        if user_responses and len(user_responses) > 0:
+            print("🔀 ORCHESTRATOR ROUTING: process_responses")
+            return "process_responses"
+        
+        if current_step in ["responses_ready_for_processing", "all_responses_received"]:
+            print("🔀 ORCHESTRATOR ROUTING: process_responses (by step)")
+            return "process_responses"
+        print("🔀 ORCHESTRATOR ROUTING: generate_questions")
+        return "generate_questions"
+
     def _should_continue_questioning(self, state: DiagnosticState) -> str:
-        """Determine if we should continue with more questions or proceed to validation"""
-        needs_more = state.get("needs_more_questions", False)
+        """Simplified evaluator logic - since we do all questions at once, always proceed to explanation"""
+        
         questions_asked = state.get("questions_asked", 0)
         max_questions = state.get("max_questions", 5)
         
-        # Check if we've reached the question limit
-        if questions_asked >= max_questions:
-            print(f"Question limit reached ({questions_asked}/{max_questions}), proceeding to validation")
-            return "proceed_to_validation"
+        print(f"🔀 EVALUATOR ROUTING (Single Round):")
+        print(f"   Questions: {questions_asked}/{max_questions}")
+        print(f"   Single round workflow - proceeding to explanation")
         
-        # Check if we need more questions based on confidence
-        if not needs_more:
-            print("Sufficient confidence achieved, proceeding to validation")
-            return "proceed_to_validation"
-        
-        print(f"Need more questions: {questions_asked}/{max_questions} asked")
-        return "more_questions"
+        # In single round workflow, always proceed to explanation after processing responses
+        return "proceed_to_explanation"
         
     @traceable(name="diagnostic_workflow")
     def run_diagnosis(self,
@@ -176,6 +168,7 @@ class MedicalDiagnosticGraph:
             "num_symptoms": len(symptoms),
             "num_predictions": len(initial_predictions) if initial_predictions else 0,
             "max_questions": max_questions,
+            "workflow_type": "single_round_all_questions",
             "patient_age": patient_info.get("age") if patient_info else None
         }
         
@@ -193,10 +186,12 @@ class MedicalDiagnosticGraph:
             "timestamp": datetime.now().isoformat(),
             "messages": [],
             "confidence_threshold": 0.8,
-            "needs_more_questions": True,
+            "needs_more_questions": False,  # Start with assumption we need questions
             "clarifying_questions": [],
             "user_responses": {},
-            "updated_symptoms": symptoms
+            "updated_symptoms": symptoms,
+            "evaluation_results": {}, 
+            "workflow_type": "single_round"
         }
         
         config = {
@@ -276,11 +271,11 @@ class MedicalDiagnosticGraph:
         print(f"Formatting question response. Found {len(questions)} questions")
         print(f"State data keys: {list(state_data.keys()) if state_data else 'No state data'}")
         
-        # FIXED: Extract reasoning steps from state_data
+        # Extract reasoning steps from state_data
         reasoning_steps = state_data.get("reasoning_steps", [])
         agent_outputs = state_data.get("agent_outputs", {})
         
-        # CHECK: If no questions found and we've reached max questions, return completion signal
+        # Check: If no questions found and we've reached max questions, return completion signal
         questions_asked = state_data.get("questions_asked", 0)
         max_questions = state_data.get("max_questions", 5)
             
@@ -293,8 +288,8 @@ class MedicalDiagnosticGraph:
                 "questions_asked": questions_asked,
                 "max_questions": max_questions,
                 "status": "proceeding_to_diagnosis",
-                "reasoning_steps": reasoning_steps,  # Include reasoning
-                "agent_outputs": agent_outputs      # Include agent outputs
+                "reasoning_steps": reasoning_steps,
+                "agent_outputs": agent_outputs
             }
             
         # Ensure all questions have proper structure
@@ -338,8 +333,8 @@ class MedicalDiagnosticGraph:
                 "questions_asked": questions_asked,
                 "max_questions": max_questions,
                 "status": "completing_diagnosis",
-                "reasoning_steps": reasoning_steps,  # Include reasoning
-                "agent_outputs": agent_outputs      # Include agent outputs
+                "reasoning_steps": reasoning_steps,
+                "agent_outputs": agent_outputs
             }
             
         progress = {
@@ -356,20 +351,18 @@ class MedicalDiagnosticGraph:
             "questions": formatted_questions,
             "progress": progress,
             "status": "waiting_for_input",
-            "reasoning_steps": reasoning_steps,  # FIXED: Include reasoning steps
-            "agent_outputs": agent_outputs,     # FIXED: Include agent outputs
-            "transparency": {                   # FIXED: Add transparency info
+            "reasoning_steps": reasoning_steps,
+            "agent_outputs": agent_outputs,
+            "transparency": {
                 "workflow_steps": len(reasoning_steps),
                 "agents_involved": list(agent_outputs.keys()),
                 "current_analysis": reasoning_steps[-1] if reasoning_steps else None
             }
         }
 
-
-    
     @traceable(name="continue_diagnosis")
     def continue_with_answer(self, session_id: str, answers: Dict[str, Any]) -> Dict[str, Any]:
-        """Continue the diagnostic workflow with a human answer"""
+        """Continue the diagnostic workflow with human answers - single round version"""
         
         if not self.checkpointer:
             return {"error": "Session persistence not available"}
@@ -381,7 +374,8 @@ class MedicalDiagnosticGraph:
             "metadata": {
                 "session_id": session_id,
                 "num_answers": len(answers) if isinstance(answers, dict) else 1,
-                "continuation": True
+                "continuation": True,
+                "workflow_type": "single_round"
             }
         }
         
@@ -391,67 +385,38 @@ class MedicalDiagnosticGraph:
             if current_state is None:
                 return {"error": "Session not found"}
             
-            print(f"Current state before answer: {current_state.values.keys() if current_state.values else 'No values'}")
-            
-            # Calculate number of answers provided
-            num_answers = len(answers) if isinstance(answers, dict) else 1
+            print(f"Single round: Processing {len(answers)} answers")
             
             # Ensure we have a proper state structure
             state_values = current_state.values or {}
             
-            # Initialize missing keys if needed
-            state_values.setdefault("clarifying_questions", [])
-            state_values.setdefault("user_responses", {})
-            state_values.setdefault("questions_asked", 0)
-            state_values.setdefault("current_step", "response_received")
-            
-            # Update state with the human answers
-            new_questions_asked = state_values.get("questions_asked", 0) + len(answers)
+            # FIXED: For single round, mark all questions as answered and set proper routing step
+            max_questions = state_values.get("max_questions", 5)
             
             updated_values = {
-            **current_state.values,
-            "user_responses": answers, 
-            "questions_asked": new_questions_asked,
-            "current_step": "response_received"
+                **current_state.values,
+                "user_responses": answers,
+                "questions_asked": max_questions,
+                "current_step": "all_responses_received",  # CHANGED: This ensures proper routing
+                "needs_more_questions": False,
+                "responses_ready": True,
+                "evaluation_results": {
+                    "needs_more_questions": False,
+                    "reason": "Single round workflow - all questions answered"
+                }
             }
             
-            # CHECK: If we've reached max questions, force completion
-            max_questions = updated_values.get("max_questions", 5)
-            if new_questions_asked >= max_questions:
-                print(f"Max questions reached after this answer: {new_questions_asked}/{max_questions}")
-                updated_values["needs_more_questions"] = False
-                updated_values["current_step"] = "force_completion"
-            
-            # Continue execution from the interrupt
+            # Continue execution - should go straight through to completion
             final_state = None
             for state in self.graph.stream(updated_values, config):
                 final_state = state
-                print(f"Continuation state keys: {list(state.keys()) if isinstance(state, dict) else 'Not a dict'}")
-                
-                # Check if we're waiting for more input
-                if self._is_waiting_for_input(state):
-                    response = self._format_question_response(state, session_id)
-                    # If the response indicates completion, break out and format results
-                    if response.get("type") in ["diagnosis_ready", "no_more_questions"]:
-                        print("Detected completion signal, proceeding to final results")
-                        break
-                    return response
+                print(f"Single round continuation: {list(state.keys()) if isinstance(state, dict) else 'Not a dict'}")
             
-            # Check if we're still at an interrupt
-            if self.checkpointer:
-                final_graph_state = self.graph.get_state(config)
-                if final_graph_state and final_graph_state.next:
-                    if 'human_input' in final_graph_state.next:
-                        response = self._format_question_response(final_graph_state.values, session_id)
-                        if response.get("type") in ["diagnosis_ready", "no_more_questions"]:
-                            print("Final state indicates completion")
-                            return self._format_results(final_graph_state.values)
-                        return response
-            
+            # Should complete without interruption in single round
             return self._format_results(final_state)
             
         except Exception as e:
-            print(f"Error continuing diagnostic workflow: {e}")
+            print(f"Error in single round continuation: {e}")
             import traceback
             traceback.print_exc()
             return {
@@ -509,9 +474,9 @@ class MedicalDiagnosticGraph:
         # Debug logging
         print(f"Formatting final results. State keys: {list(final_state.keys())}")
 
-        # Extract data from all relevant nodes
+        # Extract data from all relevant nodes in the new order
         state_data = {}
-        node_keys = ['evaluator', 'explanation', 'refinement', 'validation', 'response_integration']
+        node_keys = ['explanation', 'evaluator', 'refinement', 'validation', 'response_integration']
 
         for key in node_keys:
             if key in final_state and isinstance(final_state[key], dict):
@@ -531,6 +496,7 @@ class MedicalDiagnosticGraph:
         confidence_scores = state_data.get("confidence_scores", {})
         reasoning_steps = state_data.get("reasoning_steps", [])
         agent_outputs = state_data.get("agent_outputs", {})
+        evaluation_results = state_data.get("evaluation_results", {})
 
         print(f"Extracted: {len(predictions)} predictions, {len(explanations)} explanations, {len(reasoning_steps)} reasoning steps")
 
@@ -559,28 +525,30 @@ class MedicalDiagnosticGraph:
             "symptoms_analyzed": state_data.get("updated_symptoms",
                                             state_data.get("selected_symptoms", [])),
             "questions_asked": state_data.get("questions_asked", 0),
-            "reasoning_steps": reasoning_steps,  # Make sure this is included
-            "agent_outputs": agent_outputs,      # Include detailed agent outputs
+            "reasoning_steps": reasoning_steps,
+            "agent_outputs": agent_outputs,
+            "evaluation_results": evaluation_results,  # Include evaluator results
             "timestamp": state_data.get("timestamp"),
             "status": "completed",
             "prediction_complete": True,
-            "transparency": {  # Add transparency section
+            "transparency": {
                 "workflow_steps": len(reasoning_steps),
                 "agents_involved": list(agent_outputs.keys()),
                 "decision_process": reasoning_steps,
-                "detailed_outputs": agent_outputs
+                "detailed_outputs": agent_outputs,
+                "evaluator_decisions": evaluation_results  # Add evaluator transparency
             },
             "summary": {
                 "total_diseases_analyzed": len(final_predictions),
                 "questions_asked": state_data.get("questions_asked", 0),
                 "confidence_level": "High" if any(p.get("confidence") == "High" for p in final_predictions.values()) else "Medium",
-                "reasoning_transparency": f"{len(reasoning_steps)} decision steps recorded"
+                "reasoning_transparency": f"{len(reasoning_steps)} decision steps recorded",
+                "evaluation_summary": evaluation_results.get("reason", "Standard evaluation process")
             }
         }
 
         print(f"Final result type: {result['type']}, predictions: {len(result['predictions'])}, reasoning steps: {len(result['reasoning_steps'])}")
         return result
-
     
     def get_session_history(self, session_id: str) -> Dict[str, Any]:
         """Get the history of a diagnostic session"""

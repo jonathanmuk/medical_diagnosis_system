@@ -30,7 +30,23 @@ class MedicalAgentNodes:
         
         print(f"🔄 ORCHESTRATOR NODE STARTED - Current step: {state.get('current_step', 'unknown')}")
         print(f"   Questions asked: {state.get('questions_asked', 0)}/{state.get('max_questions', 5)}")
+        print(f"   User responses: {len(state.get('user_responses', {}))}")
     
+        # Check if we have responses to process
+        user_responses = state.get("user_responses", {})
+        if user_responses and len(user_responses) > 0:
+            print("✅ ORCHESTRATOR: User responses detected, skipping analysis")
+            return {
+                **state,
+                "current_step": "responses_ready_for_processing",
+                "reasoning_steps": state.get("reasoning_steps", []) + [{
+                    "agent": "orchestrator",
+                    "step": "responses_detected",
+                    "timestamp": datetime.now().isoformat(),
+                    "result": f"Detected {len(user_responses)} user responses, proceeding to integration"
+                }]
+            }
+        
         # Start activity tracking
         activity_id = self.activity_tracker.start_activity(
             "orchestrator", 
@@ -68,7 +84,7 @@ class MedicalAgentNodes:
             medical_context = []
 
         prompt = ChatPromptTemplate.from_messages([
-        ("system", """You are a Medical Diagnostic Orchestrator analyzing a patient case. 
+        ("system", """You are a Medical Diagnostic Orchestrator analyzing the patient case. 
         
         PATIENT CASE:
         Selected symptoms: {selected_symptoms}
@@ -82,8 +98,8 @@ class MedicalAgentNodes:
         1. SYMPTOM_ANALYSIS: Which symptoms are most diagnostically significant and why
         2. DIFFERENTIAL_DIAGNOSIS: Key differentiating factors between predicted diseases  
         3. MISSING_CLINICAL_INFO: What additional information would help narrow diagnosis
-        4. CONFIDENCE_ASSESSMENT: Why current prediction confidence is high/medium/low
-        5. QUESTIONING_STRATEGY: What type of questions would be most valuable
+        4. QUESTIONING_STRATEGY: What type of questions would be most valuable for clarification
+        5. MEDICAL_COMPLEXITY: Assessment of case complexity and diagnostic challenges
         
         Format your response with clear sections as shown above.
         """),
@@ -104,8 +120,8 @@ class MedicalAgentNodes:
         symptom_analysis = self._extract_section(content, "SYMPTOM_ANALYSIS")
         differential_diagnosis = self._extract_section(content, "DIFFERENTIAL_DIAGNOSIS")
         missing_clinical_info = self._extract_section(content, "MISSING_CLINICAL_INFO")
-        confidence_assessment = self._extract_section(content, "CONFIDENCE_ASSESSMENT")
         questioning_strategy = self._extract_section(content, "QUESTIONING_STRATEGY")
+        medical_complexity = self._extract_section(content, "MEDICAL_COMPLEXITY")
         
         # Calculate confidence metrics
         max_confidence = 0
@@ -113,12 +129,7 @@ class MedicalAgentNodes:
         if initial_predictions:
             max_confidence = max(pred.get("probability", 0) for pred in initial_predictions.values())
         
-        # Determine next action based on confidence and analysis
-        needs_more_questions = max_confidence < state.get("confidence_threshold", 0.8)
-        decision = "proceed_with_questioning" if needs_more_questions else "high_confidence_achieved"
-        
         # Detailed reasoning step
-        # Create comprehensive reasoning step
         detailed_reasoning = {
             "agent": "orchestrator",
             "step": "initial_diagnostic_analysis",
@@ -133,21 +144,15 @@ class MedicalAgentNodes:
                 "symptom_analysis": symptom_analysis,
                 "differential_diagnosis": differential_diagnosis,
                 "missing_clinical_info": missing_clinical_info,
-                "confidence_assessment": confidence_assessment,
-                "questioning_strategy": questioning_strategy
+                "questioning_strategy": questioning_strategy,
+                "medical_complexity": medical_complexity
             },
             "vector_db_usage": {
                 "queries_made": len(top_diseases) if initial_predictions else 0,
                 "context_retrieved": len(medical_context),
                 "top_diseases_researched": [d[0] for d in top_diseases] if initial_predictions else []
             },
-            "decision_logic": {
-                "max_confidence": max_confidence,
-                "confidence_threshold": state.get("confidence_threshold", 0.8),
-                "needs_more_questions": needs_more_questions,
-                "decision": decision,
-                "reasoning": f"Max confidence {max_confidence:.2f} {'<' if needs_more_questions else '>='} threshold {state.get('confidence_threshold', 0.8)}"
-            }
+            "analysis_scope": "Comprehensive medical analysis without confidence-based decisions"
         }
         
         # Complete activity tracking
@@ -156,14 +161,14 @@ class MedicalAgentNodes:
             {
                 "diseases_analyzed": prediction_count,
                 "max_confidence": max_confidence,
-                "decision": decision,
+                "analysis_complete": True,
                 "context_retrieved": len(medical_context)
             },
-            f"Analyzed {prediction_count} diseases with max confidence {max_confidence:.2f}. Decision: {decision}"
+            f"Analyzed {prediction_count} diseases with comprehensive medical reasoning. Max confidence: {max_confidence:.2f}"
         )
         
-        print(f"✅ ORCHESTRATOR NODE COMPLETED - Decision: {decision}")
-        print(f"   Max confidence: {max_confidence:.2f}, Threshold: {state.get('confidence_threshold', 0.8)}")
+        print(f"✅ ORCHESTRATOR NODE COMPLETED - Analysis complete")
+        print(f"   Max confidence: {max_confidence:.2f} (informational only)")
         print(f"   Medical context retrieved: {len(medical_context)} references")
 
         # Properly merge state while preserving all existing data
@@ -172,17 +177,16 @@ class MedicalAgentNodes:
         existing_vector_usage = state.get("vector_db_usage", [])
         
         return {
-            **state,  # Preserve all existing state
-            "current_step": "orchestration_complete",
-            "needs_more_questions": needs_more_questions,
-            "reasoning_steps": existing_reasoning + [detailed_reasoning],
-            "agent_outputs": {**existing_agent_outputs, "orchestrator": response.content},
-            "vector_db_usage": existing_vector_usage + [{
-                "agent": "orchestrator",
-                "queries": [f"Clinical presentation symptoms {d[0]}" for d in top_diseases] if initial_predictions else [],
-                "results_count": len(medical_context),
-                "timestamp": datetime.now().isoformat()
-            }],
+        **state,  # Preserve all existing state
+        "current_step": "orchestration_complete",
+        "reasoning_steps": existing_reasoning + [detailed_reasoning],
+        "agent_outputs": {**existing_agent_outputs, "orchestrator": response.content},
+        "vector_db_usage": existing_vector_usage + [{
+            "agent": "orchestrator",
+            "queries": [f"Clinical presentation symptoms {d[0]}" for d in top_diseases] if initial_predictions else [],
+            "results_count": len(medical_context),
+            "timestamp": datetime.now().isoformat()
+        }],
             "real_time_activities": self.activity_tracker.get_current_activities()
         }
         
@@ -232,7 +236,24 @@ class MedicalAgentNodes:
         
         questions_asked = state.get("questions_asked", 0)
         max_questions = state.get("max_questions", 5)
+        current_step = state.get("current_step", "")
 
+        print(f"🔄 QUESTIONING NODE STARTED - Total questions to generate: {max_questions}")
+        print(f"   Current step: {current_step}")
+        
+         # Check if we're in response processing mode
+        if current_step in ["responses_ready_for_processing", "all_responses_received"]:
+            print("❌ QUESTIONING NODE SKIPPED - Responses are being processed")
+            return {
+                **state,
+                "current_step": "questioning_skipped_for_processing",
+                "reasoning_steps": state.get("reasoning_steps", []) + [{
+                    "agent": "questioning",
+                    "step": "skipped_for_response_processing",
+                    "timestamp": datetime.now().isoformat(),
+                    "result": "Skipped questioning as responses are ready for processing"
+                }]
+            }
         # Start activity tracking
         activity_id = self.activity_tracker.start_activity(
             "questioning", 
@@ -240,69 +261,33 @@ class MedicalAgentNodes:
             {
                 "questions_asked": questions_asked,
                 "max_questions": max_questions,
-                "remaining": max_questions - questions_asked
+                "questions_to_generate": max_questions
             }
         )
 
-        # strict less than comparison
-        if questions_asked >= max_questions:
-            print(f"Question limit reached: {questions_asked}/{max_questions}")
+        # Check if we've already generated questions
+        if questions_asked > 0 or state.get("clarifying_questions"):
+            print(f"Questions already generated or asked: {questions_asked}")
             
             self.activity_tracker.complete_activity(
                 activity_id,
-                {"questions_generated": 0, "reason": "limit_reached"},
-                f"Question limit reached ({questions_asked}/{max_questions})"
+                {"questions_generated": 0, "reason": "already_generated"},
+                "Questions already generated in previous step"
             )
             
             return {
                 **state,
-                "clarifying_questions": [],
-                "current_step": "questions_limit_reached",
+                "current_step": "questions_already_generated",
                 "needs_more_questions": False,
                 "reasoning_steps": state.get("reasoning_steps", []) + [{
                     "agent": "questioning",
-                    "step": "question_limit_check",
+                    "step": "questions_already_exist",
                     "timestamp": datetime.now().isoformat(),
-                    "result": "Question limit reached",
-                    "questions_asked": questions_asked,
-                    "max_questions": max_questions
+                    "result": "Questions already generated",
+                    "questions_asked": questions_asked
                 }],
                 "real_time_activities": self.activity_tracker.get_current_activities()
             }
-        
-        # Calculate remaining questions
-        remaining_questions = min(
-            max_questions - questions_asked,
-            3  # Max 3 questions per round
-        )
-        
-        if remaining_questions <= 0:
-            print("No remaining questions allowed")
-            
-            self.activity_tracker.complete_activity(
-                activity_id,
-                {"questions_generated": 0, "reason": "no_remaining"},
-                "No remaining questions allowed"
-            )
-            
-            return {
-                **state,
-                "clarifying_questions": [],
-                "current_step": "no_more_questions_allowed",
-                "needs_more_questions": False,
-                "reasoning_steps": state.get("reasoning_steps", []) + [{
-                    "agent": "questioning",
-                    "step": "remaining_questions_check",
-                    "timestamp": datetime.now().isoformat(),
-                    "result": "No remaining questions allowed",
-                    "remaining_questions": remaining_questions
-                }],
-                "real_time_activities": self.activity_tracker.get_current_activities()
-            }
-            
-        # Get previously asked questions to avoid duplicates
-        asked_questions = state.get("asked_questions", [])
-        asked_question_texts = {q.get("question_text", "") for q in asked_questions}
         
         # Get orchestrator's analysis for context 
         orchestrator_analysis = None
@@ -314,26 +299,23 @@ class MedicalAgentNodes:
         
         # Enhanced prompt with orchestrator context
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are a Medical Questioning Specialist. Generate {remaining_questions} clarifying questions 
+            ("system", """You are a Medical Questioning Specialist. Generate ALL {max_questions}  clarifying questions at once
             to improve diagnostic accuracy.
 
             CURRENT CASE:
             Initial predictions: {initial_predictions}
             Selected symptoms: {selected_symptoms}
-            Questions already asked: {questions_asked}/{max_questions}
             
             ORCHESTRATOR ANALYSIS CONTEXT:
             {orchestrator_context}
             
-            PREVIOUSLY ASKED QUESTIONS (DO NOT REPEAT THESE):
-            {previously_asked}
-            
             INSTRUCTIONS:
-            Generate exactly {remaining_questions} high-priority yes/no questions that:
-            1. Have NOT been asked before
+            Generate exactly {max_questions} high-priority yes/no questions that:
+            1. Cover different aspects of the predicted diseases
             2. Would help confirm or rule out the predicted diseases
             3. Focus on the missing clinical information identified by the orchestrator
             4. Target the most diagnostically significant symptoms
+            5. Provide comprehensive coverage for differential diagnosis
             
             CRITICAL: Return ONLY a valid JSON array with this exact format:
             [
@@ -348,16 +330,11 @@ class MedicalAgentNodes:
                 }}
             ]
             
-            Focus on symptoms that would help differentiate between the top predicted diseases.
+            Focus on symptoms that would help differentiate between the top predicted diseases and
+            Generate questions that comprehensively cover all major differential diagnoses.
             """),
-            ("human", "Generate {remaining_questions} NEW clarifying questions based on the orchestrator's analysis")
+            ("human", "Generate ALL {max_questions} clarifying questions based on the orchestrator's analysis for comprehensive diagnosis")
         ])
-        
-        # Format previously asked questions for the prompt
-        previously_asked_text = "\n".join([
-            f"- {q.get('question_text', 'Unknown question')}" 
-            for q in asked_questions
-        ]) if asked_questions else "None"
         
         # Format orchestrator context
         orchestrator_context_text = "No orchestrator analysis available"
@@ -371,10 +348,7 @@ class MedicalAgentNodes:
         messages = prompt.format_messages(
             initial_predictions=json.dumps(state.get("initial_predictions", {}), indent=2),
             selected_symptoms=state.get("selected_symptoms", []),
-            questions_asked=questions_asked,
             max_questions=max_questions,
-            remaining_questions=remaining_questions,
-            previously_asked=previously_asked_text,
             orchestrator_context=orchestrator_context_text
         )
         
@@ -402,15 +376,6 @@ class MedicalAgentNodes:
                 start = content.find("[")
                 end = content.rfind("]") + 1
                 json_content = content[start:end]
-            
-            # Method 3: Look for object brackets (in case it's wrapped)
-            elif "{" in content and "}" in content:
-                start = content.find("{")
-                end = content.rfind("}") + 1
-                json_content = content[start:end]
-                # If it's a single object, wrap it in an array
-                if not json_content.strip().startswith("["):
-                    json_content = f"[{json_content}]"
             
             if json_content:
                 print(f"Extracted JSON content: {json_content}")
@@ -441,83 +406,62 @@ class MedicalAgentNodes:
         
         # Fallback
         if not questions:
-            print("No valid questions generated - ending questioning phase")
-            
-            self.activity_tracker.complete_activity(
-                activity_id,
-                {"questions_generated": 0, "reason": "generation_failed"},
-                "No valid questions could be generated"
-            )
-            
-            return {
-                **state,
-                "clarifying_questions": [],
-                "current_step": "no_more_questions",
-                "needs_more_questions": False,
-                "reasoning_steps": state.get("reasoning_steps", []) + [{
-                    "agent": "questioning",
-                    "step": "question_generation_failed",
-                    "timestamp": datetime.now().isoformat(),
-                    "result": "No valid questions could be generated",
-                    "llm_response": response.content[:200] + "..." if len(response.content) > 200 else response.content
-                }],
-                "real_time_activities": self.activity_tracker.get_current_activities()
-            }
-        
+            print("Generating fallback questions")
+            for i in range(max_questions):
+                questions.append({
+                    "id": f"q{i+1}",
+                    "question": f"Clarifying question {i+1} about your symptoms?",
+                    "question_text": f"Clarifying question {i+1} about your symptoms?",
+                    "related_disease": "General",
+                    "symptom_checking": "general symptoms",
+                    "priority": i+1,
+                    "type": "yes_no",
+                    "required": True
+                })
+
         print(f"Final questions generated: {len(questions)} questions")
         for q in questions:
             print(f"  - {q['question_text']}")
-            
-        # Filter out any duplicate questions before returning
-        filtered_questions = []
-        for q in questions:
-            question_text = q.get("question_text", "")
-            if question_text not in asked_question_texts:
-                filtered_questions.append(q)
-        
-        # Update asked_questions list
-        updated_asked_questions = asked_questions + filtered_questions
         
         # Complete activity tracking
         self.activity_tracker.complete_activity(
             activity_id,
             {
-                "questions_generated": len(filtered_questions),
-                "questions_filtered": len(questions) - len(filtered_questions),
-                "total_asked": len(updated_asked_questions)
+                "questions_generated": len(questions),
+                "all_questions_generated": True
             },
-            f"Generated {len(filtered_questions)} new questions (filtered {len(questions) - len(filtered_questions)} duplicates)"
+            f"Generated all {len(questions)} questions at once for comprehensive diagnosis"
         )
         
         # Create detailed reasoning step
         reasoning_step = {
             "agent": "questioning",
-            "step": "question_generation",
+            "step": "all_questions_generation",
             "timestamp": datetime.now().isoformat(),
             "input_context": {
-                "questions_asked": questions_asked,
-                "remaining_questions": remaining_questions,
-                "previously_asked_count": len(asked_questions),
-                "orchestrator_analysis_available": orchestrator_analysis is not None
+                "max_questions": max_questions,
+                "orchestrator_analysis_available": orchestrator_analysis is not None,
+                "generation_strategy": "all_at_once"
             },
             "generation_process": {
-                "raw_questions_generated": len(questions),
-                "questions_after_filtering": len(filtered_questions),
-                "duplicates_removed": len(questions) - len(filtered_questions),
-                "question_topics": [q.get("symptom_checking", "") for q in filtered_questions]
+                "questions_generated": len(questions),
+                "question_topics": [q.get("symptom_checking", "") for q in questions],
+                "diseases_covered": list(set(q.get("related_disease", "") for q in questions))
             },
-            "result": f"Generated {len(filtered_questions)} NEW clarifying questions"
+            "result": f"Generated ALL {len(questions)} clarifying questions for comprehensive diagnosis"
         }
         
-        # FIXED: Properly preserve all existing state
+        # Properly preserve all existing state
         existing_reasoning = state.get("reasoning_steps", [])
         existing_agent_outputs = state.get("agent_outputs", {})
         
         return {
             **state,  # Preserve all existing state
-            "clarifying_questions": filtered_questions,
-            "asked_questions": updated_asked_questions, 
-            "current_step": "questions_generated",
+            "clarifying_questions": questions,
+            "asked_questions": questions,  # Mark all as asked since we're generating them all
+            "questions_asked": len(questions),  # Update total count
+            "current_step": "all_questions_generated",
+            "needs_more_questions": False,  # No more questions needed
             "reasoning_steps": existing_reasoning + [reasoning_step],
             "agent_outputs": {**existing_agent_outputs, "questioning": response.content},
             "real_time_activities": self.activity_tracker.get_current_activities()
@@ -527,45 +471,38 @@ class MedicalAgentNodes:
     def human_input_node(self, state: DiagnosticState) -> DiagnosticState:
         """Human-in-the-loop node for collecting responses"""
         
-        # This node should process any user responses that were provided
         user_responses = state.get("user_responses", {})
         questions = state.get("clarifying_questions", [])
         
-        print(f"Human input node: {len(questions)} questions, {len(user_responses)} responses")
+        print(f"🔄 HUMAN INPUT NODE: {len(questions)} questions, {len(user_responses)} responses")
+        print(f"   Current step: {state.get('current_step', 'unknown')}")
         
         # Add reasoning step for transparency
         reasoning_step = {
             "agent": "human_input",
-            "step": "awaiting_user_responses",
+            "step": "processing_user_input",
             "timestamp": datetime.now().isoformat(),
             "questions_presented": len(questions),
             "responses_received": len(user_responses),
-            "status": "responses_received" if user_responses and questions else "awaiting_input"
+            "status": "responses_received" if user_responses else "awaiting_input"
         }
         
-        # If we have responses, continue; otherwise wait
-        if user_responses and questions:
-            # Process the responses
-            return {
-                **state,
-                "current_step": "responses_received",
-                "reasoning_steps": state.get("reasoning_steps", []) + [reasoning_step]
-            }
+        # Properly determine the current step based on responses
+        if user_responses and len(user_responses) > 0:
+            print("✅ User responses found, marking for processing")
+            current_step = "responses_ready_for_processing"
+        elif questions and len(questions) > 0:
+            print("❓ Questions available, awaiting user input")
+            current_step = "awaiting_human_input"
         else:
-            # Wait for human input - ensure we have questions to ask
-            if questions:
-                return {
-                    **state,
-                    "current_step": "awaiting_human_input",
-                    "reasoning_steps": state.get("reasoning_steps", []) + [reasoning_step]
-                }
-            else:
-                # No questions available, skip to next step
-                return {
-                    **state,
-                    "current_step": "no_questions_needed",
-                    "reasoning_steps": state.get("reasoning_steps", []) + [reasoning_step]
-                }
+            print("⚠️ No questions or responses available")
+            current_step = "no_questions_needed"
+        
+        return {
+            **state,
+            "current_step": current_step,
+            "reasoning_steps": state.get("reasoning_steps", []) + [reasoning_step]
+        }
                 
     
     @traceable(name="response_integration_agent")
@@ -721,7 +658,15 @@ class MedicalAgentNodes:
         symptom_disease_context = {}
         for symptom in updated_symptoms[:3]:  # Limit to top 3 symptoms for efficiency
             context = self.vector_db.search(f"Symptom {symptom} associated diseases differential diagnosis", k=2)
-            symptom_disease_context[symptom] = context
+            context_strings = []
+            for doc in context:
+                if hasattr(doc, 'page_content'):
+                    context_strings.append(doc.page_content)
+                elif hasattr(doc, 'content'):
+                    context_strings.append(doc.content)
+                else:
+                    context_strings.append(str(doc))
+            symptom_disease_context[symptom] = context_strings
 
         prompt = ChatPromptTemplate.from_messages([
             ("system", """You are a Medical Prediction Refinement Specialist. Re-rank and refine 
@@ -855,7 +800,15 @@ class MedicalAgentNodes:
         medical_validations = {}
         for disease in predictions.keys():
             medical_context = self.vector_db.search(f"Medical validation {disease} symptoms diagnosis", k=3)
-            medical_validations[disease] = medical_context
+            context_strings = []
+            for doc in medical_context:
+                if hasattr(doc, 'page_content'):
+                    context_strings.append(doc.page_content)
+                elif hasattr(doc, 'content'):
+                    context_strings.append(doc.content)
+                else:
+                    context_strings.append(str(doc))
+            medical_validations[disease] = context_strings
             
         prompt = ChatPromptTemplate.from_messages([
             ("system", """You are a Medical Knowledge Validator. Cross-reference symptom patterns 
@@ -979,8 +932,16 @@ class MedicalAgentNodes:
         explanation_context = {}
         for disease in predictions.keys():
             context = self.vector_db.search(f"Patient explanation {disease} symptoms causes treatment", k=2)
-            explanation_context[disease] = context
-        
+            context_strings = []
+            for doc in context:
+                if hasattr(doc, 'page_content'):
+                    context_strings.append(doc.page_content)
+                elif hasattr(doc, 'content'):
+                    context_strings.append(doc.content)
+                else:
+                    context_strings.append(str(doc))
+            explanation_context[disease] = context_strings
+            
         prompt = ChatPromptTemplate.from_messages([
             ("system", """You are a Medical Explanation Specialist. Create clear, understandable 
             explanations for disease predictions that patients can understand.
@@ -1116,9 +1077,9 @@ class MedicalAgentNodes:
         }
 
     
-    @traceable(name="evaluation_agent")
+    @traceable(name="evaluation_agent") 
     def evaluator_node(self, state: DiagnosticState) -> DiagnosticState:
-        """Evaluate overall confidence and determine next steps"""
+        """Evaluate overall confidence - simplified for single question round"""
         print(f"🔄 EVALUATOR NODE STARTED")
         
         questions_asked = state.get("questions_asked", 0)
@@ -1126,132 +1087,89 @@ class MedicalAgentNodes:
         
         print(f"   Questions: {questions_asked}/{max_questions}")
         print(f"   Current step: {state.get('current_step', 'unknown')}")
-    
-        # If we're in the middle of questioning, evaluate confidence for more questions
-        if questions_asked < max_questions and state.get("user_responses"):
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", """You are a Medical Confidence Evaluator. Assess whether we need more questions
-                or if we have sufficient information for diagnosis.
-                
-                Current predictions: {predictions}
-                Updated symptoms: {symptoms}
-                Questions asked so far: {questions_asked}/{max_questions}
-                Recent responses: {recent_responses}
-                
-                Evaluate:
-                1. Current diagnostic confidence level
-                2. Whether more questions would significantly improve accuracy
-                3. Risk of over-questioning vs under-questioning
-                
-                Return JSON:
-                {{
-                    "overall_confidence": "High|Medium|Low",
-                    "needs_more_questions": true/false,
-                    "reasoning": "Explanation of decision",
-                    "confidence_scores": {{
-                        "Disease1": {{"confidence_level": "High", "justification": "..."}}
-                    }}
-                }}"""),
-                ("human", "Evaluate if we need more questions or can proceed to final diagnosis.")
-            ])
-            
-            messages = prompt.format_messages(
-                predictions=json.dumps(state.get("initial_predictions", {}), indent=2),
-                symptoms=state.get("updated_symptoms", state.get("selected_symptoms", [])),
-                questions_asked=questions_asked,
-                max_questions=max_questions,
-                recent_responses=json.dumps(state.get("user_responses", {}), indent=2)
-            )
-            
-            response = self.llm.invoke(messages)
-            
-            # Parse evaluation results
-            try:
-                content = response.content.strip()
-                if "```json" in content:
-                    json_start = content.find("```json") + 7
-                    json_end = content.find("```", json_start)
-                    content = content[json_start:json_end].strip()
-                elif "{" in content and "}" in content:
-                    start = content.find("{")
-                    end = content.rfind("}") + 1
-                    content = content[start:end]
-                
-                eval_result = json.loads(content)
-                needs_more_questions = eval_result.get("needs_more_questions", False)
-                confidence_scores = eval_result.get("confidence_scores", {})
-                overall_confidence = eval_result.get("overall_confidence", "Medium")
-                
-            except (json.JSONDecodeError, KeyError) as e:
-                print(f"Error parsing evaluation result: {e}")
-                # Conservative fallback
-                needs_more_questions = questions_asked < max_questions
-                confidence_scores = {}
-                overall_confidence = "Medium"
-            
-            # Force stop if we've reached max questions
-            if questions_asked >= max_questions:
-                needs_more_questions = False
-            
-            reasoning_step = {
-                "agent": "evaluator",
-                "step": "mid_questioning_evaluation",
-                "timestamp": datetime.now().isoformat(),
-                "decision": "more_questions" if needs_more_questions else "proceed_to_final_diagnosis",
-                "confidence_assessment": overall_confidence,
+
+        # Track activity
+        activity_id = self.activity_tracker.start_activity(
+            "evaluator", 
+            "final_confidence_evaluation",
+            {
                 "questions_asked": questions_asked,
                 "max_questions": max_questions,
-                "reasoning": eval_result.get("reasoning", "Confidence evaluation completed")
+                "predictions_count": len(state.get("refined_predictions", state.get("initial_predictions", {})))
             }
-            
-            return {
-                **state,
-                "confidence_scores": confidence_scores,
-                "needs_more_questions": needs_more_questions,
-                "current_step": "mid_evaluation_complete",
-                "reasoning_steps": state.get("reasoning_steps", []) + [reasoning_step],
-                "agent_outputs": {**state.get("agent_outputs", {}), "evaluator": response.content}
-            }
+        )
+
+        # Since we're doing all questions at once, always proceed to explanation after processing
+        current_predictions = state.get("refined_predictions", state.get("initial_predictions", {}))
         
-        else:
-            # Final evaluation - we're done with questioning
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", """You are a Final Medical Evaluator. Provide final confidence assessment
-                for all disease predictions.
-                
-                Final predictions: {predictions}
-                All symptoms: {symptoms}
-                Total questions asked: {questions_asked}
-                
-                For each disease, provide final confidence evaluation."""),
-                ("human", "Provide final confidence evaluation for all predictions.")
-            ])
-            
-            predictions = state.get("refined_predictions", state.get("initial_predictions", {}))
-            symptoms = state.get("updated_symptoms", state.get("selected_symptoms", []))
-            
-            messages = prompt.format_messages(
-                predictions=json.dumps(predictions, indent=2),
-                symptoms=symptoms,
-                questions_asked=questions_asked
-            )
-            
-            response = self.llm.invoke(messages)
-            
-            reasoning_step = {
-                "agent": "evaluator",
-                "step": "final_evaluation",
-                "timestamp": datetime.now().isoformat(),
-                "total_questions_asked": questions_asked,
-                "final_assessment": response.content,
-                "workflow_status": "evaluation_complete"
+        # Calculate confidence metrics
+        max_confidence = 0
+        avg_confidence = 0
+        if current_predictions:
+            confidences = [pred.get("probability", 0) for pred in current_predictions.values()]
+            max_confidence = max(confidences)
+            avg_confidence = sum(confidences) / len(confidences)
+
+        # Since we're doing single round, always proceed to explanation
+        decision = "proceed_to_explanation"
+        needs_more_questions = False
+        confidence_sufficient = True
+        overall_confidence = "High" if max_confidence >= 0.8 else "Medium" if max_confidence >= 0.6 else "Low"
+        
+        print(f"   SINGLE ROUND COMPLETE: All questions processed, proceeding to explanation")
+        
+        # Create detailed reasoning step
+        reasoning_step = {
+            "agent": "evaluator",
+            "step": "single_round_evaluation", 
+            "timestamp": datetime.now().isoformat(),
+            "input_assessment": {
+                "questions_asked": questions_asked,
+                "max_questions": max_questions,
+                "max_confidence": max_confidence,
+                "avg_confidence": avg_confidence,
+                "predictions_evaluated": len(current_predictions),
+                "workflow_type": "single_round_all_questions"
+            },
+            "evaluation_result": {
+                "decision": decision,
+                "needs_more_questions": needs_more_questions,
+                "confidence_sufficient": confidence_sufficient,
+                "overall_confidence": overall_confidence,
+                "reasoning": "Single round workflow complete - all questions asked and processed",
+                "next_action_justification": "Proceeding to explanation after comprehensive single-round questioning"
+            },
+            "decision_factors": {
+                "workflow_complete": True,
+                "all_questions_processed": questions_asked == max_questions,
+                "single_round_strategy": True
             }
-            
-            return {
-                **state,
-                "needs_more_questions": False,
-                "current_step": "final_evaluation_complete",
-                "reasoning_steps": state.get("reasoning_steps", []) + [reasoning_step],
-                "agent_outputs": {**state.get("agent_outputs", {}), "evaluator": response.content}
-            }
+        }
+        
+        # Complete activity tracking
+        self.activity_tracker.complete_activity(
+            activity_id,
+            {
+                "decision_made": decision,
+                "confidence_sufficient": confidence_sufficient,
+                "max_confidence_evaluated": max_confidence,
+                "workflow_complete": True
+            },
+            f"Single round complete. Decision: {decision}. Max confidence: {max_confidence:.2f}"
+        )
+        
+        print(f"✅ EVALUATOR NODE COMPLETED - Decision: {decision}")
+        print(f"   Single round workflow complete")
+        print(f"   Max confidence: {max_confidence:.2f}")
+        
+        return {
+            **state,
+            "needs_more_questions": needs_more_questions,
+            "confidence_sufficient": confidence_sufficient,
+            "evaluator_decision": decision,
+            "current_step": "evaluation_complete",
+            "reasoning_steps": state.get("reasoning_steps", []) + [reasoning_step],
+            "agent_outputs": {**state.get("agent_outputs", {}), "evaluator": f"Single round evaluation complete. Proceeding to explanation with confidence: {overall_confidence}"},
+            "real_time_activities": self.activity_tracker.get_current_activities()
+        }
 

@@ -1,0 +1,19 @@
+
+{
+  "dependencies": [
+    "langsmith",
+    "langgraph",
+    "langchain",
+    "langchain-google-genai",
+    "python-dotenv"
+  ],
+  "graphs": {
+    "medical_diagnostic": {
+      "path": "studio_app:graph",
+      "description": "Advanced Medical Diagnostic System with Multi-Agent Reasoning",
+      "interrupt_before": ["human_input"],
+      "interrupt_after": []
+    }
+  },
+  "env": "./.env"
+}
