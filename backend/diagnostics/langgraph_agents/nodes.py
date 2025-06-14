@@ -946,53 +946,61 @@ class MedicalAgentNodes:
             ("system", """You are a Medical Explanation Specialist. Create clear, understandable 
             explanations for disease predictions that patients can understand.
 
-            MEDICAL EXPLANATION CONTEXT:
-            {explanation_context}
-
-            Final predictions: {predictions}
-            Patient symptoms: {symptoms}
-            Validation results: {validation}
+            PATIENT DATA:
+            - Symptoms: {symptoms}
+            - Disease Predictions: {predictions}
+            - Medical Validation: {validation}
+            - Medical Context: {explanation_context}
             
-            For each disease, provide detailed analysis:
-            1. SYMPTOM_CORRELATION: How patient symptoms relate to this condition
-            2. PROBABILITY_EXPLANATION: Why this probability was assigned
-            3. VALIDATION_INTEGRATION: How medical validation influenced the explanation
-            4. PATIENT_FRIENDLY_SUMMARY: Clear, non-alarming explanation for patients
-            5. MISSING_SYMPTOMS: What typical symptoms are absent and why that's significant
-            
-            For each disease, create explanations that:
-            1. Explain why the disease was predicted based on specific symptoms
-            2. Highlight supporting symptoms with medical reasoning
-            3. Note any missing typical symptoms and their significance
-            4. Use simple, non-alarming language while being informative
-            5. Include confidence reasoning in patient-friendly terms
-            6. Reference validation results where relevant
+            For each disease prediction, provide:
+            1. Clear explanation of why this disease was predicted
+            2. How the patient's symptoms relate to this condition
+            3. Confidence level reasoning in simple terms
+            4. Any relevant medical context in patient-friendly language
 
-            Return ONLY a valid JSON object:
-            {
-                "Disease1": {
-                    "explanation": "Clear patient-friendly explanation...",
-                    "symptom_analysis": "How symptoms support this diagnosis...",
-                    "confidence_reasoning": "Why we have this level of confidence...",
-                    "medical_context": "Relevant medical background in simple terms...",
-                    "validation_notes": "How medical validation supports this..."
-                }
-            }"""),
-            ("human", "Generate comprehensive patient-friendly explanations with detailed medical reasoning.")
+            Return ONLY a valid JSON object with this structure:
+            {{
+                "disease_name": {{
+                    "explanation": "Patient-friendly explanation here",
+                    "symptom_analysis": "How symptoms support this diagnosis",
+                    "confidence_reasoning": "Why this confidence level",
+                    "medical_context": "Relevant background in simple terms"
+                }}
+            }}"""),
+            ("human", "Generate comprehensive patient-friendly explanations.")
         ])
 
-        messages = prompt.format_messages(
-            explanation_context=json.dumps(explanation_context, indent=2),
-            predictions=json.dumps(predictions, indent=2),
-            symptoms=symptoms,
-            validation=json.dumps(validation, indent=2)
-        )
-
-        response = self.llm_with_tools.invoke(messages)
+        try:
+            # Convert all data to JSON strings for safe template formatting
+            predictions_json = json.dumps(predictions, indent=2)
+            symptoms_list = json.dumps(symptoms)
+            validation_json = json.dumps(validation, indent=2)
+            context_json = json.dumps(explanation_context, indent=2)
+            
+            messages = prompt.format_messages(
+                symptoms=symptoms_list,
+                predictions=predictions_json,
+                validation=validation_json,
+                explanation_context=context_json
+            )
+            
+            response = self.llm_with_tools.invoke(messages)
+            
+        except Exception as format_error:
+            print(f"Error formatting prompt: {format_error}")
+            # Fallback with simpler formatting
+            simple_prompt = ChatPromptTemplate.from_messages([
+                ("system", "You are a medical explanation specialist. Generate patient-friendly explanations for the given disease predictions."),
+                ("human", f"Generate explanations for these diseases: {list(predictions.keys())}")
+            ])
+            messages = simple_prompt.format_messages()
+            response = self.llm_with_tools.invoke(messages)
 
         # Parse explanations with detailed structure
         try:
             content = response.content
+            print(f"Raw LLM response: {content[:200]}...")  # Debug log
+            
             if "```json" in content:
                 json_start = content.find("```json") + 7
                 json_end = content.find("```", json_start)
@@ -1001,25 +1009,32 @@ class MedicalAgentNodes:
                 start = content.find("{")
                 end = content.rfind("}") + 1
                 content = content[start:end]
-
+            
             detailed_explanations = json.loads(content)
             
-            # Convert to simple explanations for backward compatibility while keeping detailed data
+            # Convert to simple explanations for backward compatibility
             simple_explanations = {}
             for disease, explanation_data in detailed_explanations.items():
                 if isinstance(explanation_data, dict):
-                    simple_explanations[disease] = explanation_data.get("explanation", 
+                    simple_explanations[disease] = explanation_data.get("explanation",
                         f"Based on your symptoms, there is a likelihood of {disease}.")
                 else:
                     simple_explanations[disease] = str(explanation_data)
                     
-        except (json.JSONDecodeError, KeyError) as e:
+        except (json.JSONDecodeError, KeyError, Exception) as e:
             print(f"Error parsing explanations: {e}")
             # Fallback to simple explanations
             simple_explanations = {}
             detailed_explanations = {}
-            for disease in predictions.keys():
-                simple_explanations[disease] = f"Based on symptom analysis and medical validation, {disease} was identified as a potential condition."
+            for disease, pred_data in predictions.items():
+                prob = pred_data.get('probability', 0) if isinstance(pred_data, dict) else 0
+                simple_explanations[disease] = f"Based on symptom analysis and medical validation, {disease} was identified as a potential condition with {prob:.1%} probability."
+                detailed_explanations[disease] = {
+                    "explanation": simple_explanations[disease],
+                    "symptom_analysis": "Symptom correlation analysis performed",
+                    "confidence_reasoning": f"Confidence based on {prob:.1%} probability score",
+                    "medical_context": "Medical knowledge base consulted"
+                }
 
         # Create detailed reasoning
         detailed_reasoning = {

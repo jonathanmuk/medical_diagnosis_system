@@ -472,11 +472,11 @@ const handleAnswerSubmit = async (answers) => {
                 </Badge>
               </div>
               
-              {enhancedPredictions && Object.keys(enhancedPredictions).length > 0 ? (
+              {diagnosticResult && diagnosticResult.enhanced && diagnosticResult.enhanced_predictions ? (
                 <div className="enhanced-results-grid">
-                  {Object.entries(enhancedPredictions)
-                    .sort(([, a], [, b]) => b.probability - a.probability)
-                    .map(([disease, prediction]) => (
+                  {Object.entries(diagnosticResult.enhanced_predictions)
+                  .sort(([, a], [, b]) => b.probability - a.probability)
+                  .map(([disease, prediction]) => (
                       <EnhancedPredictionResult
                         key={disease}
                         disease={disease}
