@@ -19,6 +19,7 @@ class MedicalDiagnosticGraph:
         self.gemini_api_key = gemini_api_key
         self.nodes = MedicalAgentNodes(vector_db, gemini_api_key)
         self.tools = create_medical_tools(vector_db)
+        self.session_reasoning_steps = {} 
         
         # Setup LangSmith
         self.langsmith_enabled = DiagnosticConfig.setup_langsmith()
@@ -31,6 +32,40 @@ class MedicalDiagnosticGraph:
         
         self.checkpointer = self._create_checkpointer(db_path)
         self.graph = self._build_graph()
+    
+    def _add_reasoning_step(self, session_id: str, agent: str, step: str, content: str, details: Dict = None):
+        """Add a reasoning step for real-time updates"""
+        if session_id not in self.session_reasoning_steps:
+            self.session_reasoning_steps[session_id] = []
+        
+        # Ensure content is string
+        content_str = content if isinstance(content, str) else str(content)
+        
+        step_id = f"{session_id}_{len(self.session_reasoning_steps[session_id])}"
+        
+        reasoning_step = {
+            'id': step_id,
+            'agent': agent,
+            'step': step,
+            'content': content_str,
+            'timestamp': datetime.now().isoformat(),
+            'details': details or {},
+            'status': 'completed'
+        }
+            
+        self.session_reasoning_steps[session_id].append(reasoning_step)
+        print(f"Added reasoning step for session {session_id}: {agent} - {step}")
+        
+        # Store in diagnostic API for SSE access
+        if hasattr(self, 'diagnostic_api_ref'):
+            self.diagnostic_api_ref.update_session_reasoning(session_id, self.session_reasoning_steps[session_id])
+        
+        return reasoning_step
+    
+    # method to get reasoning steps
+    def get_session_reasoning_steps(self, session_id: str) -> List[Dict[str, Any]]:
+        """Get reasoning steps for a session"""
+        return self.session_reasoning_steps.get(session_id, [])
     
     def _create_checkpointer(self, db_path: str):
         """Create SQLite checkpointer with proper connection handling"""
@@ -161,7 +196,11 @@ class MedicalDiagnosticGraph:
         
         if session_id is None:
             session_id = str(uuid.uuid4())
-            
+
+        # Add orchestrator start step
+        self._add_reasoning_step(session_id, "orchestrator", "workflow_started",
+                            "Multi-agent diagnostic workflow initiated")
+
         # Add metadata for tracing
         trace_metadata = {
             "session_id": session_id,
@@ -171,7 +210,7 @@ class MedicalDiagnosticGraph:
             "workflow_type": "single_round_all_questions",
             "patient_age": patient_info.get("age") if patient_info else None
         }
-        
+
         # Initialize state
         initial_state = {
             "selected_symptoms": symptoms,
@@ -186,22 +225,26 @@ class MedicalDiagnosticGraph:
             "timestamp": datetime.now().isoformat(),
             "messages": [],
             "confidence_threshold": 0.8,
-            "needs_more_questions": False,  # Start with assumption we need questions
+            "needs_more_questions": False,
             "clarifying_questions": [],
             "user_responses": {},
             "updated_symptoms": symptoms,
-            "evaluation_results": {}, 
+            "evaluation_results": {},
             "workflow_type": "single_round"
         }
-        
+
         config = {
             "configurable": {
                 "thread_id": session_id
             },
             "metadata": trace_metadata
         } if self.checkpointer else {"metadata": trace_metadata}
-        
+
         try:
+            # Add step for workflow execution start
+            self._add_reasoning_step(session_id, "system", "workflow_execution_started",
+                                "Beginning step-by-step diagnostic analysis")
+            
             # Run the graph and collect all states
             final_state = None
             
@@ -209,28 +252,46 @@ class MedicalDiagnosticGraph:
                 final_state = state
                 print(f"Current state keys: {list(state.keys()) if isinstance(state, dict) else 'Not a dict'}")
                 
+                # Add reasoning steps for each node execution
+                if isinstance(state, dict):
+                    for node_name, node_state in state.items():
+                        if isinstance(node_state, dict) and node_name != '__interrupt__':
+                            step_content = f"Executed {node_name} node"
+                            if node_name == "orchestrator":
+                                step_content = "Orchestrator analyzing symptoms and determining next steps"
+                            elif node_name == "questioning":
+                                step_content = "Generating clarifying questions based on initial analysis"
+                            elif node_name == "response_integration":
+                                step_content = "Integrating user responses with diagnostic analysis"
+                            elif node_name == "refinement":
+                                step_content = "Refining predictions based on additional information"
+                            elif node_name == "validation":
+                                step_content = "Validating diagnostic predictions"
+                            elif node_name == "evaluator":
+                                step_content = "Evaluating overall diagnostic confidence"
+                            elif node_name == "explanation":
+                                step_content = "Generating explanations for diagnostic results"
+                                
+                            self._add_reasoning_step(session_id, node_name, f"{node_name}_executed", step_content)
+                
                 # Check if we're at a human input interrupt
                 if self._is_waiting_for_input(state):
                     print("Detected waiting for input state")
+                    self._add_reasoning_step(session_id, "system", "awaiting_user_input",
+                                        "Waiting for user responses to clarifying questions")
                     return self._format_question_response(state, session_id)
-            
-            # If we get here, check if we have an interrupt state
-            if self.checkpointer:
-                current_state = self.graph.get_state(config)
-                if current_state and current_state.next:
-                    # We're at an interrupt point
-                    print(f"At interrupt point. Next: {current_state.next}")
-                    if 'human_input' in current_state.next:
-                        return self._format_question_response(current_state.values, session_id)
-            
-            # Workflow completed normally
-            print(f"Workflow completed. Final state keys: {list(final_state.keys()) if final_state else 'None'}")
-            return self._format_results(final_state)
+
+            # Rest of your existing code...
             
         except Exception as e:
             print(f"Error in diagnostic workflow: {e}")
             import traceback
             traceback.print_exc()
+            
+            # Add error reasoning step
+            self._add_reasoning_step(session_id, "system", "workflow_error",
+                                f"Workflow error: {str(e)}")
+            
             return {
                 "error": str(e),
                 "session_id": session_id,

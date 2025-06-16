@@ -14,4 +14,6 @@ urlpatterns = [
     path('predict/disease/answer-questions/', views_enhanced.answer_clarifying_questions_view, name='answer_clarifying_questions'),
     path('sessions/<str:session_id>/status/', views_enhanced.get_session_status_view, name='session_status'),
     path('sessions/active/', views_enhanced.get_active_sessions_view, name='active_sessions'),
+    path('reasoning-stream/<str:session_id>/', views_enhanced.reasoning_stream_view, name='reasoning_stream'),
+    path('reasoning-stream/<str:session_id>', views_enhanced.reasoning_stream_view, name='reasoning_stream'),
 ]

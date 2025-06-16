@@ -10,6 +10,16 @@ from .langgraph_agents.api_integration import DiagnosticAPIIntegration
 from .langgraph_agents.config import DiagnosticConfig
 from .vector_db import MedicalKnowledgeDB
 import asyncio
+from django.http import StreamingHttpResponse
+import time
+import uuid
+from datetime import datetime
+from django.views.decorators.csrf import csrf_exempt
+from django.utils.decorators import method_decorator
+from django.views import View
+from django.views.decorators.http import require_GET
+from django.views.decorators.gzip import gzip_page
+from django.http import HttpResponse
 
 # Initialize the diagnostic system
 vector_db = MedicalKnowledgeDB()
@@ -59,18 +69,47 @@ def clean_for_json_serialization(obj):
 @parser_classes([JSONParser])
 def predict_disease_enhanced_view(request):
     """Enhanced disease prediction using LangGraph multi-agent system"""
+   
     try:
         print("Enhanced disease prediction view called")
         data = request.data
         selected_symptoms = data.get('symptoms', [])
         patient_info = data.get('patient_info', {})
         max_questions = data.get('max_questions', DiagnosticConfig.MAX_QUESTIONS_DEFAULT)
-
         print(f"Selected symptoms: {selected_symptoms}")
 
         if not selected_symptoms:
             return Response({'error': 'No symptoms provided'}, status=status.HTTP_400_BAD_REQUEST)
-
+        
+        # Create session ID FIRST
+        session_id = str(uuid.uuid4())
+        
+        # Initialize session in diagnostic API IMMEDIATELY
+        diagnostic_api.initialize_session(session_id)
+        
+        # Add initial reasoning steps BEFORE any processing
+        timestamp = datetime.now().isoformat()
+        initial_steps = [
+            {
+                "id": f"{session_id}_0",
+                "agent": "system",
+                "step": "session_created",
+                "timestamp": timestamp,
+                "content": "Diagnostic session initialized",
+                "status": "completed"
+            }
+        ]
+        
+        # Store initial steps IMMEDIATELY
+        diagnostic_api.update_session_reasoning(session_id, initial_steps)
+        
+        # Flush the session data to make it immediately available for SSE
+        try:
+            diagnostic_api.flush_session_data(session_id)
+        except AttributeError:
+            # Method might not exist, continue without it
+            pass
+        
         # Get initial prediction from ML model
         print("Getting initial prediction...")
         initial_result = predict_disease(selected_symptoms)
@@ -79,6 +118,21 @@ def predict_disease_enhanced_view(request):
         if 'error' in initial_result:
             return Response(initial_result, status=status.HTTP_400_BAD_REQUEST)
 
+         # Add ML prediction step IMMEDIATELY after prediction
+        ml_step = {
+            "id": f"{session_id}_1",
+            "agent": "ml_model",
+            "step": "initial_prediction",
+            "timestamp": datetime.now().isoformat(),
+            "content": f"Initial prediction completed: {len(initial_result)} diseases analyzed",
+            "status": "completed",
+            "details": initial_result
+        }
+        
+        current_steps = diagnostic_api.get_session_reasoning(session_id)
+        current_steps.append(ml_step)
+        diagnostic_api.update_session_reasoning(session_id, current_steps)
+        
         # If there are no predictions, return early
         if not initial_result or len(initial_result) == 0:
             print("No diseases predicted in initial result")
@@ -87,8 +141,23 @@ def predict_disease_enhanced_view(request):
                 'enhanced': False,
                 'message': 'No diseases predicted based on the provided symptoms.',
                 'clarifying_questions': [],
-                'reasoning_steps': ['Initial ML model prediction: No diseases identified']
+                'reasoning_steps': current_steps,
+                'session_id': session_id
             })
+       
+
+        # Add workflow start step BEFORE starting LangGraph
+        workflow_start_step = {
+            "id": f"{session_id}_2",
+            "agent": "orchestrator",
+            "step": "workflow_started",
+            "timestamp": datetime.now().isoformat(),
+            "content": "Multi-agent diagnostic workflow initiated",
+            "status": "completed"
+        }
+        
+        current_steps.append(workflow_start_step)
+        diagnostic_api.update_session_reasoning(session_id, current_steps)
 
         # Use the LangGraph agent system to enhance the prediction
         try:
@@ -118,7 +187,8 @@ def predict_disease_enhanced_view(request):
                         symptoms=selected_symptoms,
                         patient_info=patient_info,
                         initial_predictions=initial_result,
-                        max_questions=max_questions
+                        max_questions=max_questions,
+                        session_id=session_id
                     )
                 )
             finally:
@@ -191,14 +261,27 @@ def predict_disease_enhanced_view(request):
             print(f"Exception during LangGraph enhancement: {str(e)}")
             import traceback
             traceback.print_exc()
-            # If enhancement fails, return the initial prediction with a note
+            # Add error step
+            error_step = {
+                "id": f"{session_id}_error",
+                "agent": "system",
+                "step": "enhancement_error",
+                "timestamp": datetime.now().isoformat(),
+                "content": f"Enhancement failed: {str(e)}",
+                "status": "error"
+            }
+            
+            current_steps.append(error_step)
+            diagnostic_api.update_session_reasoning(session_id, current_steps)
+            
             result = {
                 'initial_predictions': initial_result,
                 'enhanced': False,
                 'enhancement_error': str(e),
                 'status': 'error',
+                'session_id': session_id,
                 'clarifying_questions': [],
-                'reasoning_steps': [f'Enhancement failed: {str(e)}']
+                'reasoning_steps': current_steps
             }
 
         # Save result if user is authenticated
@@ -236,6 +319,122 @@ def predict_disease_enhanced_view(request):
         traceback.print_exc()
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+@require_GET
+@csrf_exempt
+def reasoning_stream_view(request, session_id):
+    """Enhanced Server-sent events endpoint for real-time reasoning updates"""
+    print(f"SSE Request received - Origin: {request.META.get('HTTP_ORIGIN')}")
+    print(f"SSE Session ID: {session_id}")
+    
+    def event_stream():
+        """Generator function for SSE with better error handling"""
+        try:
+            # Send initial connection confirmation
+            yield f"event: connected\ndata: {json.dumps({'type': 'connected', 'session_id': session_id, 'timestamp': datetime.now().isoformat()})}\n\n"
+            
+            # Get existing reasoning steps from the diagnostic API
+            try:
+                reasoning_steps = diagnostic_api.get_session_reasoning(session_id)
+                print(f"Found {len(reasoning_steps)} existing reasoning steps for session {session_id}")
+            except Exception as e:
+                print(f"Error getting session reasoning: {e}")
+                reasoning_steps = []
+            
+            # Send existing steps
+            for i, step in enumerate(reasoning_steps):
+                step_data = {
+                    'type': 'step',
+                    'step_id': f"{session_id}_{i}",
+                    'agent': step.get('agent', 'unknown'),
+                    'step': step.get('step', 'processing'),
+                    'timestamp': step.get('timestamp', datetime.now().isoformat()),
+                    'content': step.get('content', ''),
+                    'status': 'completed',
+                    'details': step.get('details', {})
+                }
+                yield f"data: {json.dumps(step_data)}\n\n"
+                time.sleep(0.1)
+            
+            # Monitor for new steps
+            last_check = time.time()
+            max_wait_time = 300  # 5 minutes timeout
+            start_time = time.time()
+            
+            while (time.time() - start_time) < max_wait_time:
+                try:
+                    # Check for new reasoning steps
+                    try:
+                        new_steps = diagnostic_api.get_new_reasoning_steps(session_id, last_check)
+                    except Exception as e:
+                        print(f"Error getting new reasoning steps: {e}")
+                        new_steps = []
+                    
+                    for step in new_steps:
+                        step_data = {
+                            'type': 'step',
+                            'step_id': step.get('id', f"{session_id}_{int(time.time())}"),
+                            'agent': step.get('agent', 'unknown'),
+                            'step': step.get('step', 'processing'),
+                            'timestamp': step.get('timestamp', datetime.now().isoformat()),
+                            'content': step.get('content', ''),
+                            'status': step.get('status', 'completed'),
+                            'details': step.get('details', {})
+                        }
+                        yield f"data: {json.dumps(step_data)}\n\n"
+                    
+                    # Check if session is complete
+                    try:
+                        if diagnostic_api.is_session_complete(session_id):
+                            yield f"data: {json.dumps({'type': 'complete', 'session_id': session_id, 'timestamp': datetime.now().isoformat()})}\n\n"
+                            break
+                    except Exception as e:
+                        print(f"Error checking session completion: {e}")
+                    
+                    last_check = time.time()
+                    time.sleep(1)  # Poll every second
+                    
+                except Exception as e:
+                    error_data = {
+                        'type': 'error',
+                        'message': str(e),
+                        'timestamp': datetime.now().isoformat()
+                    }
+                    yield f"data: {json.dumps(error_data)}\n\n"
+                    break
+            
+            # Send timeout message if needed
+            if (time.time() - start_time) >= max_wait_time:
+                timeout_data = {
+                    'type': 'timeout',
+                    'message': 'Session monitoring timeout',
+                    'timestamp': datetime.now().isoformat()
+                }
+                yield f"data: {json.dumps(timeout_data)}\n\n"
+                
+        except Exception as e:
+            error_data = {
+                'type': 'error',
+                'message': f'Stream error: {str(e)}',
+                'timestamp': datetime.now().isoformat()
+            }
+            yield f"event: error\ndata: {json.dumps(error_data)}\n\n"
+
+    response = StreamingHttpResponse(
+        event_stream(),
+        content_type='text/event-stream'
+    )
+    
+    # FIXED: Proper CORS headers without hop-by-hop headers
+    origin = request.META.get('HTTP_ORIGIN', 'http://localhost:5173')
+    response['Access-Control-Allow-Origin'] = origin
+    response['Access-Control-Allow-Credentials'] = 'true'
+    response['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+    response['Access-Control-Allow-Headers'] = 'Cache-Control, Accept'
+    response['Cache-Control'] = 'no-cache'
+    # REMOVED: Connection header (this was causing the hop-by-hop error)
+    response['X-Accel-Buffering'] = 'no'
+    
+    return response
 
 @api_view(['POST'])
 @parser_classes([JSONParser])

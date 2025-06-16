@@ -5,17 +5,96 @@ from .state import DiagnosticState
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 import json
+import time
+from datetime import datetime
 
 class DiagnosticAPIIntegration:
     def __init__(self, vector_db, gemini_api_key: str):
         self.diagnostic_graph = MedicalDiagnosticGraph(vector_db, gemini_api_key)
+        self.diagnostic_graph.diagnostic_api_ref = self
         self.executor = ThreadPoolExecutor(max_workers=4)
+        self.session_reasoning = {}
+        self.session_status = {}
+        self.session_initialized = {}
+        self.session_timestamps = {}
+        
+    def initialize_session(self, session_id: str):
+        """Initialize a session for reasoning tracking"""
+        self.session_reasoning[session_id] = []
+        self.session_status[session_id] = "initialized"
+        self.session_initialized[session_id] = True
+        self.session_timestamps[session_id] = time.time()
+        print(f"Initialized session {session_id} for reasoning tracking")
+
+    def update_session_reasoning(self, session_id: str, reasoning_steps: List[Dict[str, Any]]):
+        """Update reasoning steps for a session"""
+        # Ensure session is initialized
+        if session_id not in self.session_initialized:
+            self.initialize_session(session_id)
+            
+         # Add timestamps to steps that don't have them
+        for step in reasoning_steps:
+            if 'timestamp' not in step:
+                step['timestamp'] = datetime.now().isoformat()
+            if 'id' not in step:
+                step['id'] = f"{session_id}_{len(reasoning_steps)}"
+            
+        self.session_reasoning[session_id] = reasoning_steps
+        self.session_timestamps[session_id] = time.time()
+        print(f"Updated reasoning steps for session {session_id}: {len(reasoning_steps)} steps")
+        
+        # Also update in graph if available
+        if hasattr(self.diagnostic_graph, 'session_reasoning_steps'):
+            self.diagnostic_graph.session_reasoning_steps[session_id] = reasoning_steps
+
+    def add_reasoning_step(self, session_id: str, agent: str, step: str, content: str, details: Dict = None):
+        """Add a single reasoning step"""
+        if session_id not in self.session_initialized:
+            self.initialize_session(session_id)
+        
+        current_steps = self.session_reasoning.get(session_id, [])
+        
+        new_step = {
+            'id': f"{session_id}_{len(current_steps)}",
+            'agent': agent,
+            'step': step,
+            'content': content if isinstance(content, str) else str(content),
+            'timestamp': datetime.now().isoformat(),
+            'details': details or {},
+            'status': 'completed'
+        }
+        
+        current_steps.append(new_step)
+        self.update_session_reasoning(session_id, current_steps)
+        return new_step
+    
+    
+    def get_session_reasoning(self, session_id: str) -> List[Dict[str, Any]]:
+        """Get reasoning steps for a session"""
+        try:
+            # Ensure session exists
+            if session_id not in self.session_reasoning:
+                self.initialize_session(session_id)
+                
+            # Try to get from graph first
+            if hasattr(self.diagnostic_graph, 'get_session_reasoning_steps'):
+                graph_steps = self.diagnostic_graph.get_session_reasoning_steps(session_id)
+                if graph_steps:
+                    self.session_reasoning[session_id] = graph_steps
+                    return graph_steps
+                    
+            # Fallback to local storage
+            return self.session_reasoning.get(session_id, [])
+        except Exception as e:
+            print(f"Error getting session reasoning: {e}")
+            return self.session_reasoning.get(session_id, [])
     
     async def start_diagnosis(self,
                          symptoms: List[str],
                          patient_info: Optional[Dict[str, Any]] = None,
                          initial_predictions: Optional[Dict[str, Any]] = None,
-                         max_questions: int = 5) -> Dict[str, Any]:
+                         max_questions: int = 5,
+                         session_id: str = None) -> Dict[str, Any]:
         """
         Start a new diagnostic session
         
@@ -41,7 +120,7 @@ class DiagnosticAPIIntegration:
                 symptoms,
                 patient_info,
                 initial_predictions,  # Pass initial predictions
-                None,  # session_id will be auto-generated
+                session_id,
                 max_questions
             )
             
@@ -205,3 +284,46 @@ class DiagnosticAPIIntegration:
             summary["recommendation"] = "Low confidence - continue monitoring or seek medical advice if symptoms persist"
         
         return summary
+    
+
+    def get_new_reasoning_steps(self, session_id: str, since_timestamp: float) -> List[Dict[str, Any]]:
+        """Get new reasoning steps since timestamp"""
+        try:
+            all_steps = self.get_session_reasoning(session_id)
+            new_steps = []
+            
+            for step in all_steps:
+                step_time = step.get('timestamp')
+                if step_time:
+                    try:
+                        # Convert ISO timestamp to unix timestamp
+                        from datetime import datetime
+                        if isinstance(step_time, str):
+                            step_timestamp = datetime.fromisoformat(step_time.replace('Z', '+00:00')).timestamp()
+                        else:
+                            step_timestamp = float(step_time)
+                        
+                        if step_timestamp > since_timestamp:
+                            new_steps.append(step)
+                    except (ValueError, TypeError):
+                        # If timestamp parsing fails, include the step
+                        new_steps.append(step)
+            
+            return new_steps
+        except Exception as e:
+            print(f"Error getting new reasoning steps: {e}")
+            return []
+
+    def is_session_complete(self, session_id: str) -> bool:
+        """Check if a session is complete"""
+        try:
+            session_history = self.diagnostic_graph.get_session_history(session_id)
+            if session_history:
+                return session_history.get('status') == 'completed'
+            return False
+        except Exception as e:
+            print(f"Error checking session completion: {e}")
+            return False
+        
+    
+

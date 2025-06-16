@@ -27,7 +27,6 @@ class MedicalAgentNodes:
     @traceable(name="orchestrator_agent")
     def orchestrator_node(self, state: DiagnosticState) -> DiagnosticState:
         """Orchestrator agent that coordinates the diagnostic process"""
-        
         print(f"🔄 ORCHESTRATOR NODE STARTED - Current step: {state.get('current_step', 'unknown')}")
         print(f"   Questions asked: {state.get('questions_asked', 0)}/{state.get('max_questions', 5)}")
         print(f"   User responses: {len(state.get('user_responses', {}))}")

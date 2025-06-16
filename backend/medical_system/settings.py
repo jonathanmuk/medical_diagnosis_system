@@ -164,11 +164,35 @@ CORS_ALLOW_ALL_ORIGINS = True  # Only use this for development!
 # For production, specify allowed origins:
 # CORS_ALLOWED_ORIGINS = [
 #     "http://localhost:5173",
-#     "https://yourdomain.com",
+#     "http://localhost:3000",
 # ]
 
 # Additional CORS settings if needed
 CORS_ALLOW_CREDENTIALS = True
+
+
+CORS_ALLOW_METHODS = [
+    'GET',
+    'OPTIONS',
+]
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+    'cache-control',
+]
+
+# Add SSE specific settings
+CORS_PREFLIGHT_MAX_AGE = 86400
+
+CORS_EXPOSE_HEADERS = ['Content-Type', 'Cache-Control', 'X-Accel-Buffering']
 
 # Create directories for ML models and data
 MODELS_DIR = os.path.join(BASE_DIR, 'diagnostics', 'models')

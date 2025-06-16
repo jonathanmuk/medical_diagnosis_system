@@ -10,6 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from "../../components/ui/alert";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../../components/ui/accordion";
 import { Badge } from "../../components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
+import RealtimeReasoning from '../../components/RealtimeReasoning';
 import { Separator } from "../../components/ui/separator";
 import { ScrollArea } from "../../components/ui/scroll-area";
 import { 
@@ -53,6 +54,8 @@ const EnhancedDiseasePrediction = () => {
   const [showQuestionsDialog, setShowQuestionsDialog] = useState(false);
   const [predictionComplete, setPredictionComplete] = useState(false);
   const [diagnosticResult, setDiagnosticResult] = useState(null);
+  const [showRealtimeReasoning, setShowRealtimeReasoning] = useState(false);
+  const [realtimeReasoningSteps, setRealtimeReasoningSteps] = useState([]);
 
 
   useEffect(() => {
@@ -100,95 +103,116 @@ const EnhancedDiseasePrediction = () => {
   };
 
   const handleSubmit = async (event) => {
-    event.preventDefault();
+  event.preventDefault();
+  
+  if (selectedSymptoms.length === 0) {
+    setError('Please select at least one symptom');
+    return;
+  }
+
+  try {
+    setLoading(true);
+    setError(null);
+    setInitialPredictions(null);
+    setEnhancedPredictions(null);
+    setClarifyingQuestions([]);
     
-    if (selectedSymptoms.length === 0) {
-      setError('Please select at least one symptom');
-      return;
-    }
+    // Generate session ID immediately and start reasoning display
+    const newSessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    setSessionId(newSessionId);
+    setShowRealtimeReasoning(true);
+    setRealtimeReasoningSteps([]);
     
-    try {
-      setLoading(true);
-      setError(null);
-      setInitialPredictions(null);
-      setEnhancedPredictions(null);
-      setClarifyingQuestions([]);
-      setSessionId(null);
-      
-      const result = await diagnosticService.predictDiseaseEnhanced(selectedSymptoms);
-      
-      if (result.error) {
-        setError(result.error);
-      } else {
-        // Set initial predictions
-        if (result.initial_predictions) {
-          setInitialPredictions(result.initial_predictions);
-        }
-        
-        // Set enhanced predictions if available
-        if (result.enhanced && result.enhanced_predictions) {
-          setDiagnosticResult(result);
-          setPredictionComplete(!result.clarifying_questions);
-        }
-        
-        // Set clarifying questions if available
-        if (result.clarifying_questions && result.clarifying_questions.length > 0) {
-          setClarifyingQuestions(result.clarifying_questions);
-          setShowQuestionsDialog(true);
-        }
-        
-        // Save both result ID and session ID
-        if (result.result_id) {
-          setResultId(result.result_id);
-        }
-        
-        if (result.session_id) {
-          setSessionId(result.session_id);
-        }
-        
-        // If there was an enhancement error but we still have initial predictions
-        if (!result.enhanced && result.enhancement_error) {
-          setError(`Note: Enhanced analysis unavailable - ${result.enhancement_error}`);
-        }
+    console.log('Session ID set:', newSessionId);
+    
+    const result = await diagnosticService.predictDiseaseEnhanced(selectedSymptoms);
+    
+    if (result.error) {
+      setError(result.error);
+      setShowRealtimeReasoning(false);
+    } else {
+      // Update session ID if different from backend
+      if (result.session_id && result.session_id !== newSessionId) {
+        setSessionId(result.session_id);
+        console.log('Session ID updated:', result.session_id);
       }
-    } catch (error) {
-      setError(error.response?.data?.error || 'Error predicting disease');
-      console.error('Error:', error);
-    } finally {
-      setLoading(false);
+      
+      // Set initial predictions
+      if (result.initial_predictions) {
+        setInitialPredictions(result.initial_predictions);
+      }
+      
+      // Set initial reasoning steps if available
+      if (result.reasoning_steps) {
+        setRealtimeReasoningSteps(result.reasoning_steps);
+      }
+      
+      // Handle enhanced predictions
+      if (result.enhanced && result.enhanced_predictions) {
+        setDiagnosticResult(result);
+        setPredictionComplete(!result.clarifying_questions);
+      }
+      
+      // Handle clarifying questions
+      if (result.clarifying_questions && result.clarifying_questions.length > 0) {
+        setClarifyingQuestions(result.clarifying_questions);
+        setShowQuestionsDialog(true);
+      }
+      
+      // Save result ID
+      if (result.result_id) {
+        setResultId(result.result_id);
+      }
+      
+      if (!result.enhanced && result.enhancement_error) {
+        setError(`Note: Enhanced analysis unavailable - ${result.enhancement_error}`);
+      }
     }
-  };
+  } catch (error) {
+    setError(error.response?.data?.error || 'Error predicting disease');
+    setShowRealtimeReasoning(false);
+    console.error('Error:', error);
+  } finally {
+    setLoading(false);
+  }
+};
+
 
 const handleAnswerSubmit = async (answers) => {
   if (!sessionId && !resultId) {
     setError('Cannot submit answers: no session or result ID available.');
     return;
   }
-  
+
   setIsAnsweringQuestions(true);
   setError(null);
-  
+
   try {
     const result = await diagnosticService.answerClarifyingQuestions(
       resultId, 
       answers, 
       sessionId
     );
-    
+
     if (result.error) {
       setError(result.error);
     } else {
-      // Update predictions with new data
+      // Update predictions
       if (result.initial_predictions) {
         setInitialPredictions(result.initial_predictions);
       }
-      
+
       if (result.enhanced_predictions) {
         setDiagnosticResult(result);
         setPredictionComplete(!result.clarifying_questions || result.prediction_complete);
       }
-      
-      // Check if we have more questions or final results
+
+      // Update reasoning steps
+      if (result.reasoning_steps) {
+        setRealtimeReasoningSteps(prev => [...prev, ...result.reasoning_steps]);
+      }
+
+      // Handle more questions or completion
       if (result.clarifying_questions && result.clarifying_questions.length > 0) {
         setClarifyingQuestions(result.clarifying_questions);
         setShowQuestionsDialog(true);
@@ -197,13 +221,13 @@ const handleAnswerSubmit = async (answers) => {
         if (result.enhanced_predictions) {
           setDiagnosticResult(result);
         }
+        // Keep reasoning panel open until final results
       }
-      
-      // Update IDs if changed
+
+      // Update IDs
       if (result.result_id) {
         setResultId(result.result_id);
       }
-      
       if (result.session_id) {
         setSessionId(result.session_id);
       }
@@ -214,6 +238,10 @@ const handleAnswerSubmit = async (answers) => {
   } finally {
     setIsAnsweringQuestions(false);
   }
+};
+
+const handleReasoningStepsUpdate = (steps) => {
+  setRealtimeReasoningSteps(steps);
 };
 
   const handleReset = () => {
@@ -323,7 +351,9 @@ const handleAnswerSubmit = async (answers) => {
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-        
+
+        <div className="diagnostic-workspace">
+        <div className="main-content">
         <form onSubmit={handleSubmit} className="predictor-form">
           <Card className="symptoms-card ai-enhanced-card">
             <CardHeader className="symptoms-card-header">
@@ -638,7 +668,20 @@ const handleAnswerSubmit = async (answers) => {
           )}
         </form>
       </div>
-      
+      </div>
+       {/* Real-time Reasoning Panel */}
+    {showRealtimeReasoning && (
+      <div className="reasoning-sidebar">
+        <RealtimeReasoning
+          isActive={showRealtimeReasoning}
+          sessionId={sessionId}
+          initialSteps={realtimeReasoningSteps}
+          onStepsUpdate={handleReasoningStepsUpdate}
+          shouldConnect={true}
+        />
+      </div>
+    )}
+    </div>
       <Footer />
 
       {/* Clarifying Questions Dialog */}

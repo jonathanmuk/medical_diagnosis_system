@@ -873,7 +873,7 @@
     0 8px 32px rgba(59, 130, 246, 0.08),
     inset 0 1px 0 rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(10px);
-  transition: all 0.3s ease;
+  transition: all 0.05s ease;
   margin-bottom: 2rem;
 }
 
@@ -1045,7 +1045,7 @@
   border: 1px solid rgba(59, 130, 246, 0.08);
   border-radius: 0.5rem;
   padding: 1rem;
-  transition: all 0.2s ease;
+  transition: all 0.05s ease;
   backdrop-filter: blur(5px);
   position: relative;
   overflow: hidden;
@@ -1093,7 +1093,7 @@
   background: rgba(255, 255, 255, 0.8);
   position: relative;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: all 0.05s ease;
   flex-shrink: 0;
 }
 
@@ -1117,7 +1117,7 @@
   color: white;
   font-size: 0.875rem;
   font-weight: 700;
-  animation: checkmarkPop 0.3s ease;
+  animation: checkmarkPop 0.05s ease;
 }
 
 @keyframes checkmarkPop {
@@ -1159,7 +1159,7 @@
   color: hsl(var(--foreground));
   cursor: pointer;
   line-height: 1.4;
-  transition: color 0.2s ease;
+  transition: color 0.05s ease;
   text-transform: capitalize;
 }
 
@@ -1455,4 +1455,54 @@
   border-radius: 4px;
   max-height: 200px;
   overflow-y: auto;
+}
+
+.diagnostic-workspace {
+  display: flex;
+  gap: 2rem;
+  align-items: flex-start;
+}
+
+.main-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.reasoning-sidebar {
+  width: 400px;
+  flex-shrink: 0;
+}
+
+.questions-dialog {
+  z-index: 60; /* Ensure it appears above reasoning panel */
+}
+
+.realtime-reasoning-card {
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.reasoning-step {
+  padding: 0.75rem;
+  border-radius: 0.5rem;
+  background: white;
+  border: 1px solid #e5e7eb;
+  margin-bottom: 0.5rem;
+}
+
+.current-step {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  border-color: #3b82f6;
+}
+
+@media (max-width: 1024px) {
+  .diagnostic-workspace {
+    flex-direction: column;
+  }
+  
+  .reasoning-sidebar {
+    width: 100%;
+    order: -1; /* Show reasoning first on mobile */
+  }
 }
