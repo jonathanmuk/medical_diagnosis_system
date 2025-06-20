@@ -103,13 +103,6 @@ def predict_disease_enhanced_view(request):
         # Store initial steps IMMEDIATELY
         diagnostic_api.update_session_reasoning(session_id, initial_steps)
         
-        # Flush the session data to make it immediately available for SSE
-        try:
-            diagnostic_api.flush_session_data(session_id)
-        except AttributeError:
-            # Method might not exist, continue without it
-            pass
-        
         # Get initial prediction from ML model
         print("Getting initial prediction...")
         initial_result = predict_disease(selected_symptoms)

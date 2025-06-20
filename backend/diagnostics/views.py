@@ -101,23 +101,71 @@ def user_diagnostic_history(request):
     user = request.user
     results = DiagnosticResult.objects.filter(user=user).order_by('-created_at')
     
-    history = []
+    # Structure the response to separate different types
+    history = {
+        'malaria': [],
+        'disease': [],
+        'enhanced': []
+    }
+    
     for result in results:
-        item = {
+        base_item = {
             'id': result.id,
-            'type': result.diagnostic_type,
-            'date': result.created_at,
-            'result': result.result_data
+            'created_at': result.created_at,
+            'result_data': result.result_data
         }
         
-        # Add image URL for malaria results
-        if result.diagnostic_type == 'malaria' and hasattr(result, 'malaria_image'):
-            item['image_url'] = request.build_absolute_uri(result.malaria_image.image.url)
-        
-        # Add symptoms for disease results
-        if result.diagnostic_type == 'disease' and hasattr(result, 'symptom_input'):
-            item['symptoms'] = result.symptom_input.symptoms
-        
-        history.append(item)
+        if result.diagnostic_type == 'malaria':
+            # Add image URL for malaria results
+            if hasattr(result, 'malaria_image'):
+                base_item['image_url'] = request.build_absolute_uri(result.malaria_image.image.url)
+            
+            # Extract malaria-specific data
+            result_data = result.result_data
+            malaria_item = {
+                **base_item,
+                'is_infected': result_data.get('is_infected', False),
+                'confidence': result_data.get('confidence', 0.0),
+                'prediction': 'Infected' if result_data.get('is_infected') else 'Not Infected'
+            }
+            history['malaria'].append(malaria_item)
+            
+        elif result.diagnostic_type in ['disease', 'basic']:
+            # Add symptoms for basic disease results
+            if hasattr(result, 'symptom_input'):
+                base_item['symptoms'] = result.symptom_input.symptoms
+            
+            # Extract disease prediction data
+            result_data = result.result_data
+            disease_item = {
+                **base_item,
+                'predicted_disease': list(result_data.keys())[0] if result_data else 'Unknown',
+                'confidence': 'High' if result_data else 'Low',
+                'prediction_type': 'basic',
+                'symptoms': base_item.get('symptoms', [])
+            }
+            history['disease'].append(disease_item)
+            
+        elif result.diagnostic_type in ['enhanced', 'completed']:
+            # Add symptoms for enhanced results
+            if hasattr(result, 'symptom_input'):
+                base_item['symptoms'] = result.symptom_input.symptoms
+            
+            # Extract enhanced prediction data
+            result_data = result.result_data
+            enhanced_predictions = result_data.get('enhanced_predictions', result_data.get('initial_predictions', {}))
+            
+            enhanced_item = {
+                **base_item,
+                'predicted_disease': list(enhanced_predictions.keys())[0] if enhanced_predictions else 'Unknown',
+                'confidence': 'High',  # Enhanced predictions are typically high confidence
+                'prediction_type': 'enhanced',
+                'status': result_data.get('status', 'completed'),
+                'questions_asked': result_data.get('questions_asked', 0),
+                'symptoms': base_item.get('symptoms', []),
+                'session_id': result_data.get('session_id'),
+                'has_reasoning': bool(result_data.get('reasoning_steps', []))
+            }
+            history['enhanced'].append(enhanced_item)
     
     return Response(history)

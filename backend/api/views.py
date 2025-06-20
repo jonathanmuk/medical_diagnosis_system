@@ -220,23 +220,40 @@ def user_diagnostic_history(request):
     user = request.user
     results = DiagnosticResult.objects.filter(user=user).order_by('-created_at')
     
-    history = []
+    malaria_history = []
+    disease_history = []
+    
     for result in results:
         item = {
             'id': result.id,
-            'type': result.diagnostic_type,
-            'date': result.created_at,
-            'result': result.result_data
+            'created_at': result.created_at,
+            'result_data': result.result_data
         }
         
-        # Add image URL for malaria results
-        if result.diagnostic_type == 'malaria' and hasattr(result, 'malaria_image'):
-            item['image_url'] = request.build_absolute_uri(result.malaria_image.image.url)
-        
-        # Add symptoms for disease results
-        if result.diagnostic_type == 'disease' and hasattr(result, 'symptom_input'):
-            item['symptoms'] = result.symptom_input.symptoms
-        
-        history.append(item)
+        if result.diagnostic_type == 'malaria':
+            # Add malaria-specific fields
+            if hasattr(result, 'malaria_image'):
+                item['image_url'] = request.build_absolute_uri(result.malaria_image.image.url)
+            
+            # Extract malaria-specific data from result_data
+            item['is_infected'] = result.result_data.get('is_infected', False)
+            item['confidence'] = result.result_data.get('confidence', 0)
+            
+            malaria_history.append(item)
+            
+        elif result.diagnostic_type == 'disease':
+            # Add disease-specific fields
+            if hasattr(result, 'symptom_input'):
+                item['symptoms'] = result.symptom_input.symptoms
+            
+            # Extract disease-specific data from result_data
+            item['predicted_disease'] = result.result_data.get('predicted_disease', '')
+            item['confidence'] = result.result_data.get('confidence', 'Low')
+            
+            disease_history.append(item)
     
-    return Response(history)
+    # Return structured response
+    return Response({
+        'malaria': malaria_history,
+        'disease': disease_history
+    })

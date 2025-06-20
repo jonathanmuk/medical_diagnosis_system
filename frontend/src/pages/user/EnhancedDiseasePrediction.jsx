@@ -260,7 +260,94 @@ const handleReasoningStepsUpdate = (steps) => {
     return (enhancedPredictions && Object.keys(enhancedPredictions).length > 0) || 
            (initialPredictions && Object.keys(initialPredictions).length > 0);
   };
+  // Helper function to format step names
+const formatStepName = (stepData) => {
+  if (typeof stepData === 'object' && stepData.step) {
+    const stepName = stepData.step;
+    // Convert snake_case to Title Case
+    return stepName
+      .split('_')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(' ');
+  }
+  return 'Processing Step';
+};
 
+// Helper function to format medical analysis content
+const formatMedicalAnalysis = (medicalAnalysis) => {
+  if (!medicalAnalysis || typeof medicalAnalysis !== 'object') {
+    return null;
+  }
+
+  const sections = [
+    { key: 'symptom_analysis', title: 'Symptom Analysis' },
+    { key: 'differential_diagnosis', title: 'Differential Diagnosis' },
+    { key: 'missing_clinical_info', title: 'Missing Clinical Information' },
+    { key: 'questioning_strategy', title: 'Questioning Strategy' },
+    { key: 'medical_complexity', title: 'Medical Complexity' }
+  ];
+
+  return sections.map(section => {
+    const content = medicalAnalysis[section.key];
+    if (!content) return null;
+
+    // Clean up the content - remove markdown formatting and extra asterisks
+    const cleanContent = content
+      .replace(/\*\*/g, '') // Remove bold markdown
+      .replace(/^\*+\s*/, '') // Remove leading asterisks
+      .replace(/\n\*+\s*/g, '\n• ') // Convert bullet points
+      .trim();
+
+    return {
+      title: section.title,
+      content: cleanContent
+    };
+  }).filter(Boolean);
+};
+
+// Helper function to format timestamp
+const formatTimestamp = (timestamp) => {
+  if (!timestamp) return '';
+  try {
+    const date = new Date(timestamp);
+    return date.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
+    });
+  } catch (error) {
+    return timestamp;
+  }
+};
+
+const formatExplanationAnalysis = (explanationAnalysis) => {
+  if (!explanationAnalysis || typeof explanationAnalysis !== 'object') {
+    return null;
+  }
+
+  return Object.entries(explanationAnalysis).map(([disease, analysis]) => ({
+    disease,
+    symptomCorrelation: analysis.symptom_correlation || 'No correlation analysis available',
+    confidenceReasoning: analysis.confidence_reasoning || 'No confidence reasoning available'
+  }));
+};
+
+const filterReasoningStepsForDisplay = (steps) => {
+  if (!steps || !Array.isArray(steps)) return [];
+  
+  const allowedSteps = [
+    'initial_diagnostic_analysis',
+    'processing_user_responses', 
+    'generating_patient_explanations'
+  ];
+  
+  return steps.filter(step => {
+    const stepData = typeof step === 'string' ? JSON.parse(step) : step;
+    return allowedSteps.includes(stepData.step);
+  });
+};
   return (
     <div className="enhanced-disease-predictor-page">
       <Header activePath="/enhanced-disease-prediction" />
@@ -609,49 +696,115 @@ const handleReasoningStepsUpdate = (steps) => {
                 </CardHeader>
                 <CardContent>
                   <Accordion type="single" collapsible className="w-full">
-                    {diagnosticResult.reasoning_steps.map((step, index) => {
-                      // Convert step to string if it's not already a string
-                      const stepText = typeof step === 'string' ? step : 
-                                      typeof step === 'object' ? JSON.stringify(step, null, 2) :
-                                      String(step);
+                    {filterReasoningStepsForDisplay(diagnosticResult.reasoning_steps).map((step, index) => {
+                      const stepData = typeof step === 'string' ? JSON.parse(step) : step;
+                      const stepName = formatStepName(stepData);
+                      const timestamp = formatTimestamp(stepData.timestamp);
                       
                       return (
                         <AccordionItem key={index} value={`step-${index}`}>
                           <AccordionTrigger>
-                            <div className="flex items-center">
-                              <div className="step-number mr-3">{index + 1}</div>
-                              <span className="step-summary">
-                                {stepText.substring(0, 80)}{stepText.length > 80 ? "..." : ""}
-                              </span>
+                            <div className="flex items-center justify-between w-full">
+                              <div className="flex items-center">
+                                <div className="step-number mr-3">{index + 1}</div>
+                                <span className="step-title font-medium">{stepName}</span>
+                              </div>
+                              {timestamp && (
+                                <span className="text-sm text-gray-500 ml-2">{timestamp}</span>
+                              )}
                             </div>
                           </AccordionTrigger>
                           <AccordionContent>
                             <div className="reasoning-step-detail">
-                              {typeof step === 'object' ? (
-                                <pre className="whitespace-pre-wrap text-sm bg-gray-50 p-3 rounded">
-                                  {JSON.stringify(step, null, 2)}
-                                </pre>
+                              {stepData.step === 'initial_diagnostic_analysis' && stepData.medical_analysis ? (
+                                <div className="medical-analysis-content">
+                                  {formatMedicalAnalysis(stepData.medical_analysis)?.map((section, sectionIndex) => (
+                                    <div key={sectionIndex} className="analysis-section mb-4">
+                                      <h4 className="text-sm font-semibold text-gray-800 mb-2">
+                                        {section.title}
+                                      </h4>
+                                      <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                                        {section.content.split('\n').map((paragraph, pIndex) => (
+                                          paragraph.trim() && (
+                                            <p key={pIndex} className="mb-2">
+                                              {paragraph.trim()}
+                                            </p>
+                                          )
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : stepData.step === 'processing_user_responses' && stepData.processing_result?.medical_reasoning ? (
+                                <div className="medical-reasoning-content">
+                                  <div className="analysis-section">
+                                    <h4 className="text-sm font-semibold text-gray-800 mb-2">
+                                      Medical Reasoning
+                                    </h4>
+                                    <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                                      {stepData.processing_result.medical_reasoning.split('\n').map((paragraph, pIndex) => (
+                                        paragraph.trim() && (
+                                          <p key={pIndex} className="mb-2">
+                                            {paragraph.trim()}
+                                          </p>
+                                        )
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
+                              ) : stepData.step === 'generating_patient_explanations' && stepData.explanation_analysis ? (
+                                <div className="explanation-analysis-content">
+                                  <div className="analysis-section">
+                                    <h4 className="text-sm font-semibold text-gray-800 mb-3">
+                                      Disease Explanation Analysis
+                                    </h4>
+                                    <div className="space-y-4">
+                                      {formatExplanationAnalysis(stepData.explanation_analysis)?.map((diseaseAnalysis, diseaseIndex) => (
+                                        <div key={diseaseIndex} className="disease-explanation-item border-l-4 border-blue-200 pl-4 py-2">
+                                          <h5 className="text-sm font-medium text-gray-900 mb-2">
+                                            {diseaseAnalysis.disease}
+                                          </h5>
+                                          <div className="space-y-2">
+                                            <div>
+                                              <span className="text-xs font-medium text-gray-600 uppercase tracking-wide">
+                                                Symptom Correlation:
+                                              </span>
+                                              <p className="text-sm text-gray-700 mt-1 leading-relaxed">
+                                                {diseaseAnalysis.symptomCorrelation}
+                                              </p>
+                                            </div>
+                                            <div>
+                                              <span className="text-xs font-medium text-gray-600 uppercase tracking-wide">
+                                                Confidence Reasoning:
+                                              </span>
+                                              <p className="text-sm text-gray-700 mt-1 leading-relaxed">
+                                                {diseaseAnalysis.confidenceReasoning}
+                                              </p>
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                </div>
                               ) : (
-                                <p className="whitespace-pre-wrap">{stepText}</p>
+                                // This fallback should not appear with filtering, but kept for safety
+                                <div className="generic-step-content">
+                                  <p className="text-sm text-gray-500 italic">
+                                    Step details not available for display
+                                  </p>
+                                </div>
                               )}
                             </div>
-                            {diagnosticResult.agent_outputs && 
-                            diagnosticResult.agent_outputs[`step_${index}`] && (
-                              <div className="agent-output mt-3">
-                                <h4 className="text-sm font-medium">Agent Analysis:</h4>
-                                <pre className="agent-output-content">
-                                  {JSON.stringify(
-                                    diagnosticResult.agent_outputs[`step_${index}`], 
-                                    null, 2
-                                  )}
-                                </pre>
-                              </div>
-                            )}
                           </AccordionContent>
                         </AccordionItem>
                       );
                     })}
                   </Accordion>
+                  {/* Show count of filtered vs total steps for debugging info */}
+                  <div className="mt-4 text-xs text-gray-500 text-center">
+                    Showing {filterReasoningStepsForDisplay(diagnosticResult.reasoning_steps).length} of {diagnosticResult.reasoning_steps.length} reasoning steps
+                  </div>
                 </CardContent>
               </Card>
             )}

@@ -281,7 +281,6 @@ class MedicalDiagnosticGraph:
                                         "Waiting for user responses to clarifying questions")
                     return self._format_question_response(state, session_id)
 
-            # Rest of your existing code...
             
         except Exception as e:
             print(f"Error in diagnostic workflow: {e}")
